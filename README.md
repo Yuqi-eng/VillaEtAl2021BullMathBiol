@@ -1,9 +1,10 @@
 # Public gitlab repository VillaEtAl2021BullMathBiol
 
 This repository provides Matlab files to perform simulations as described in
-*Mechanical models of pattern and form in biological tissues: the role of stress-strain constitutive equations*
-by *C. Villa, M.A.J. Chaplain, A. Gerisch, T. Lorenzi*
-and to appear in *Bullettin of Mathematical Biology* (2021).
+*C. Villa, M.A.J. Chaplain, A. Gerisch, T. Lorenzi.
+Mechanical models of pattern and form in biological tissues: the role of stress-strain constitutive equations.
+Bullettin of Mathematical Biology, volume 83, issue 7, article 80. (2021)*,
+DOI: https://doi.org/10.1007/s11538-021-00912-5 .
 For details we refer the interested reader to this publication and its supplementary material.
 
 If you use this software in your work then please cite the above named paper.
