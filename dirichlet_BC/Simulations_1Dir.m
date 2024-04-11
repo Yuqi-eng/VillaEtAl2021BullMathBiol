@@ -69,7 +69,7 @@ par.Uright = 0;
 x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = x(2)-x(1);            % Cell size
 t0 = 0;                        % Initial time
-tf = 5;                    % Final time
+tf = 10;                    % Final time
 tspan = linspace(t0,tf,100);   % Time span
 
 %% Initial conditions - eq.(28)
@@ -103,7 +103,7 @@ pfixed = ones(par.K,1);
 ufixed = zeros(par.K,1);
 [y0,yp0,resnorm] = decic(@(t,y,yp)(mechanochemical(y,yp,par)), t0, ...
     y0, [nfixed; pfixed; ufixed], ...
-    zeros(3*par.K,1), zeros(3*par.K,1), opt);
+    [zeros(2*par.K,1); -0.1*ones(par.K,1)], zeros(3*par.K,1), opt);
 disp(['residuum (from decic) of IC = ' num2str(resnorm, '%15.10e')]);
 disp(['residuum (from res()) of IC = ' num2str(res(y0,yp0), '%15.10e')]);
 %% Solve
@@ -170,7 +170,7 @@ function f = mechanochemical(y,yp,par)
     % Advection velocity at grid cell interfaces - eq.(S.6)
     % up_Avx1 = Avx1(up); 
     % vx1 = alpha*Mx1(p,par) + up_Avx1; 
-    vx1 = up;
+    vx1 = uptilde;
     % fn(n,n',p,u') = 0 - eq.(S.5)
     % fn = np - D*Mxx1(ntilde, par) + MA1(ntilde, vx1, par) - r*n.*(1-n);
     fn = np;
@@ -178,7 +178,7 @@ function f = mechanochemical(y,yp,par)
     %%% Equation for p
     % fp(p,p',u') = 0 - eq.(S.10)
     % fp = pp + MA1(ptilde, uptilde, par);
-    fp = pp - 0.1*Mx1(ptilde,par);
+    fp = pp + MA1(ptilde, vx1, par);
 
     %%% Equation for u 
     % Traction term - eq.(S.12)-(S.14)
@@ -194,7 +194,7 @@ function f = mechanochemical(y,yp,par)
     % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
     % fu = b1*Mxx1(uptilde, par) + b0*Mxx1(utilde, par) ...
     %    + Mx1(Trtilde, par) - a1*s*(p.*up + pp.*u) - a0*s*p.*u; 
-    fu = up;
+    fu = up + 0.1;
 
     %%% Full system - eq.(S.1)
     f = [fn; fp; fu];
@@ -272,14 +272,14 @@ function fluxdiffx1 = MA1(y, vel, par)
     % ycut = y(2:end-1);
     % flux = NaN(size(ycut));
     flux = NaN(size(y));
-    flux(1) = 0;
-    for i = 2:size(flux)-1
+    for i = 2:size(y)-1
         if (vel>0)
             flux(i) = vel(i)*y(i);
         else 
             flux(i) = vel(i)*y(i+1);
         end
     end
+    flux(1) = flux(2);
     flux(end) = flux(end-1);
     % compute flux difference per grid cell - def.(S.7) and (S.4)
     fluxdiffx1 = Mx1(flux,par);
