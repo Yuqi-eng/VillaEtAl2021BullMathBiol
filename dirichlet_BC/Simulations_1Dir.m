@@ -60,16 +60,16 @@ par.model = in_model;          % type of viscoelastic model
 %par.model = 'Maxwell';
 %par.model = 'Kelvin-Voigt'; 
 par.K = in_K;                  % Number of spatial grid cells
-par.L = 10;                     % Domain length
-par.Nleft = 2;
-par.Nright = 2;
+par.L = 1;                     % Domain length
+par.Nleft = 1;
+par.Nright = 1;
 par.Pleft = 1;
 par.Pright = 1;
 par.Uright = 0;
 x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = x(2)-x(1);            % Cell size
 t0 = 0;                        % Initial time
-tf = 200;                    % Final time
+tf = 5;                    % Final time
 tspan = linspace(t0,tf,100);   % Time span
 
 %% Initial conditions - eq.(28)
@@ -79,12 +79,14 @@ steadystate = [ones(2*par.K,1); zeros(par.K,1)];
 % factP = 1e-2;                  % factor for random perturbation
 % y0 = steadystate+factP*randP;  % perturbed IC [n0, p0, u0] as long column
 % pos = x(1,1:end-1);             % since we're working with periodic BC for now
-f = 1+0.5*exp(-((x-0.5*par.L)./0.2).^2);        % adding a gaussian noise
-f1 = 2 + 10*sin(0.1*pi.*x);
-n0 = (f1.*ones(1,par.K)).';      % cells
-% p0 = (f.*ones(1,par.K)).';      % collagen
-p0 = zeros(par.K,1);
+f = 1+0.5*exp(-((x-0.5*par.L)./0.2).^2);        % adding a gaussian bump
+% f1 = 2 + 10*sin(0.1*pi.*x);
+% f2 = 1 + 0.5*x;
+n0 = (f.*ones(1,par.K)).';      % cells
+p0 = (f.*ones(1,par.K)).';      % collagen
+% p0 = ones(par.K,1);
 u0 = zeros(par.K,1);            % displacement
+% u0 = (f2.*ones(1,par.K)).';
 y0 = [n0;p0;u0];                % concactanate arrays
 
 %% Solve with ODE15i
@@ -96,7 +98,7 @@ disp(['residuum of steady state = ' ...
 % [y0,yp0,resnorm] = decic(@(t,y,yp)(mechanochemical(y,yp,par)), t0, ...
 %     y0, ones(3*par.K,1), zeros(3*par.K,1), zeros(3*par.K,1));
 opt = odeset('RelTol', 10.0^(-7), 'AbsTol' , 10.0^(-7));
-nfixed = ones(par.K,1);
+nfixed = zeros(par.K,1);
 pfixed = ones(par.K,1);
 ufixed = zeros(par.K,1);
 [y0,yp0,resnorm] = decic(@(t,y,yp)(mechanochemical(y,yp,par)), t0, ...
@@ -132,33 +134,22 @@ function f = mechanochemical(y,yp,par)
     % lambda = 0.5; % (cell traction) saturation coefficient
     % tau = 0.2;    % cell traction 
 
-    % % Parameter values
-    % eta = 1;      % viscosity
-    % E = 1;        % elasticity
-    % D = 0.01;     % diffusion
-    % alpha = 0; % haptotaxis
-    % r = 1;        % proliferation
-    % s = 0.1;       % substrate elasticity
-    % beta = 0; % long range traction 
-    % lambda = 0; % (cell traction) saturation coefficient
-    % tau = 0.2;    % cell traction 
-
-    % Diffusion test case
-    eta = 0;      % viscosity
-    E = 0;        % elasticity
-    D = 0.5;     % diffusion
+    % Parameter values
+    eta = 1;      % viscosity
+    E = 1;        % elasticity
+    D = 0.01;     % diffusion
     alpha = 0; % haptotaxis
-    r = 0;        % proliferation
-    s = 0;       % substrate elasticity
+    r = 1;        % proliferation
+    s = 1;       % substrate elasticity
     beta = 0; % long range traction 
     lambda = 0; % (cell traction) saturation coefficient
-    tau = 0;    % cell traction 
+    tau = 0.01;    % cell traction 
     
     %%% Choose constitutive model (see Table 1)
     switch par.model
         case 'Kelvin-Voigt' % Kelvin Voigt  - eq.(3)
             %[a0,a1,b0,b1] = deal(1,0,E,eta); 
-            [a0,a1,b0,b1] = deal(1,0,0,0);
+            [a0,a1,b0,b1] = deal(0.1,0,0,0);
         case 'Maxwell' % Maxwell - eq.(4)
             [a0,a1,b0,b1] = deal(1/eta,1/E,0,1);
         otherwise
@@ -172,7 +163,7 @@ function f = mechanochemical(y,yp,par)
     utilde = [0; u; par.Uright];
     [np,pp,up] = deal(yp(1:par.K),yp(par.K+1:2*par.K),...
         yp(2*par.K+1:3*par.K));
-    %% NEED TO THINK ABOUT THIS, what's the BC for u_t? Is this causing the IC at the left to be discontinuous?
+    % up = [-0.1*ones(par.K,1)];
     uptilde = [0; up; 0];
     
     %%% Equation for n
@@ -182,12 +173,12 @@ function f = mechanochemical(y,yp,par)
     vx1 = up;
     % fn(n,n',p,u') = 0 - eq.(S.5)
     % fn = np - D*Mxx1(ntilde, par) + MA1(ntilde, vx1, par) - r*n.*(1-n);
-    fn = np - D*Mxx1(ntilde, par);
+    fn = np;
 
     %%% Equation for p
     % fp(p,p',u') = 0 - eq.(S.10)
-    % fp = pp + MA1(ptilde, vx1, par);
-    fp = pp;
+    % fp = pp + MA1(ptilde, uptilde, par);
+    fp = pp - 0.1*Mx1(ptilde,par);
 
     %%% Equation for u 
     % Traction term - eq.(S.12)-(S.14)
@@ -198,11 +189,11 @@ function f = mechanochemical(y,yp,par)
     % fp2 = pp + beta*Mxx1(pp, par); % M_T1 P'
     % Tr = tau*(a0*fn1.*fp1 + a1*(fn2.*np.*fp1+fn1.*fp2));
     Tr = a0*tau*p.*n;
-    % Trtilde = [a0*tau*par.Pleft*par.Nleft; Tr; a0*tau*par.Pright*par.Nright];
-    Trtilde = [0; Tr; a0*tau*par.Pright*par.Nright];
+    Trtilde = [a0*tau*par.Pleft*par.Nleft; Tr; a0*tau*par.Pright*par.Nright];
+    % Trtilde = [0; Tr; a0*tau*par.Pright*par.Nright];
     % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
     % fu = b1*Mxx1(uptilde, par) + b0*Mxx1(utilde, par) ...
-    %    + Mx1(Trtilde, par) - a1*s*(p.*up + pp.*u) - a0*s*p.*u;
+    %    + Mx1(Trtilde, par) - a1*s*(p.*up + pp.*u) - a0*s*p.*u; 
     fu = up;
 
     %%% Full system - eq.(S.1)
@@ -276,25 +267,22 @@ end
 %%% Compute advection at grid cell interfaces using first order upwinding
 %%% with advective velocity given at grid cell interfaces - def.(S.7)
 function fluxdiffx1 = MA1(y, vel, par)
-    % find pos/neg velocity entries
-    % velPos_ind = (vel>0);
-    % velNeg_ind = (~velPos_ind);
     % compute flux accross cell interfaces using first order upwinding 
     % def.(S.8)-(S.9)
-    ycut = y(2:end-1);
-    flux = NaN(size(ycut));
-    % flux(velPos_ind) = ycut(velPos_ind).*vel(velPos_ind);
-    % flux(velNeg_ind) = y(velNeg_ind+2).*vel(velNeg_ind);
+    % ycut = y(2:end-1);
+    % flux = NaN(size(ycut));
+    flux = NaN(size(y));
     flux(1) = 0;
-    for i = 2:size(flux)
+    for i = 2:size(flux)-1
         if (vel>0)
-            flux(i) = vel(i)*ycut(i);
+            flux(i) = vel(i)*y(i);
         else 
-            flux(i) = vel(i)*y(i+2);
+            flux(i) = vel(i)*y(i+1);
         end
     end
+    flux(end) = flux(end-1);
     % compute flux difference per grid cell - def.(S.7) and (S.4)
-    fluxdiffx1 = Mx1([0;flux;flux(end)],par);
+    fluxdiffx1 = Mx1(flux,par);
 end
 
 %%% Plot solution 
@@ -316,8 +304,8 @@ function plot_solution(x,y,t,par,video_on,video_filename)
         subplot(1,3,1)
         plot(x,n)
         title('$n(t,x)$')
-        %ylim([0,max(2,max(n))])
-        ylim([0,12])
+        ylim([0,max(2,max(n))])
+        % ylim([0,12])
         axis square
         subplot(1,3,2)
         plot(x,p)
