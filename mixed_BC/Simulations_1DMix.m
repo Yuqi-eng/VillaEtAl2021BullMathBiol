@@ -61,9 +61,7 @@ par.model = in_model;          % type of viscoelastic model
 %par.model = 'Kelvin-Voigt'; 
 par.K = in_K;                  % Number of spatial grid cells
 par.L = 1;                     % Domain length
-%par.Nleft = 1;
-par.Nright = 2;
-%par.Pleft = 1;
+par.Nright = 1;
 par.Pright = 1;
 par.Uright = 0;
 x = linspace(0,par.L,par.K); % Discretise spatial domain
@@ -74,19 +72,14 @@ tspan = linspace(t0,tf,100);   % Time span
 
 %% Initial conditions - eq.(28)
 steadystate = [ones(2*par.K,1); zeros(par.K,1)];
-% rng(par.seed);                 % initialize random number generator
-% randP = [randn(par.K,1); zeros( 2*par.K,1)]; % random perturbation
-% factP = 1e-2;                  % factor for random perturbation
-% y0 = steadystate+factP*randP;  % perturbed IC [n0, p0, u0] as long column
-% pos = x(1,1:end-1);             % since we're working with periodic BC for now
 f = 1+0.5*exp(-((x-0.5*par.L)./0.2).^2);        % adding a gaussian bump
 % f1 = 2 + 10*sin(0.1*pi.*x);
 % f2 = 1 + 0.5*x;
-f3 = 2 + 10*cos(0.05*pi.*x);
-n0 = (f3.*ones(1,par.K)).';      % cells
+% f3 = 2 + 10*cos(0.05*pi.*x);
+n0 = (f.*ones(1,par.K)).';      % cells
 % n0 = 2*ones(par.K,1);
-p0 = (f.*ones(1,par.K)).';      % collagen
-% p0 = ones(par.K,1);
+% p0 = (f.*ones(1,par.K)).';      % collagen
+p0 = ones(par.K,1);
 u0 = zeros(par.K,1);            % displacement
 % u0 = (f2.*ones(1,par.K)).';
 y0 = [n0;p0;u0];                % concactanate arrays
@@ -100,7 +93,7 @@ disp(['residuum of steady state = ' ...
 % [y0,yp0,resnorm] = decic(@(t,y,yp)(mechanochemical(y,yp,par)), t0, ...
 %     y0, ones(3*par.K,1), zeros(3*par.K,1), zeros(3*par.K,1));
 opt = odeset('RelTol', 10.0^(-7), 'AbsTol' , 10.0^(-7));
-nfixed = ones(par.K,1);
+nfixed = zeros(par.K,1);
 pfixed = zeros(par.K,1);
 ufixed = zeros(par.K,1);
 [y0,yp0,resnorm] = decic(@(t,y,yp)(mechanochemical(y,yp,par)), t0, ...
@@ -125,33 +118,22 @@ end
 
 %% Main function implementing the model
 function f = mechanochemical(y,yp,par)
-    % % Parameter values
-    % eta = 1;      % viscosity
-    % E = 1;        % elasticity
-    % D = 0.01;     % diffusion
-    % alpha = 0; % haptotaxis
-    % r = 1;        % proliferation
-    % s = 1;       % substrate elasticity
-    % beta = 0; % long range traction 
-    % lambda = 0; % (cell traction) saturation coefficient
-    % tau = 0.01;    % cell traction 
-
-    % Parameter values
-    eta = 0;      % viscosity
-    E = 0;        % elasticity
-    D = 0;     % diffusion
+    %%% Parameter values
+    eta = 1;      % viscosity
+    E = 1;        % elasticity
+    D = 0.01;     % diffusion
     alpha = 0; % haptotaxis
-    r = 0;        % proliferation
-    s = 0;       % substrate elasticity
+    r = 1;        % proliferation
+    s = 1;       % substrate elasticity
     beta = 0; % long range traction 
     lambda = 0; % (cell traction) saturation coefficient
-    tau = 0;    % cell traction 
+    tau = 0.01;    % cell traction 
     
     %%% Choose constitutive model (see Table 1)
     switch par.model
         case 'Kelvin-Voigt' % Kelvin Voigt  - eq.(3)
             %[a0,a1,b0,b1] = deal(1,0,E,eta); 
-            [a0,a1,b0,b1] = deal(1,0,0,0);
+            [a0,a1,b0,b1] = deal(1,0,E,eta);
         case 'Maxwell' % Maxwell - eq.(4)
             [a0,a1,b0,b1] = deal(1/eta,1/E,0,1);
         otherwise
@@ -160,8 +142,8 @@ function f = mechanochemical(y,yp,par)
     
     %%% Reshape input vectors
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
-    ntilde = [n; par.Nright]; 
-    ptilde = [p; par.Pright]; 
+    ntilde = [n(2); n; par.Nright]; 
+    ptilde = [p(2); p; par.Pright]; 
     utilde = [0; u; par.Uright];
     [np,pp,up] = deal(yp(1:par.K),yp(par.K+1:2*par.K),...
         yp(2*par.K+1:3*par.K));
@@ -174,12 +156,11 @@ function f = mechanochemical(y,yp,par)
     % vx1 = alpha*Mx1(p,par) + up_Avx1; 
     vx1 = uptilde;
     % fn(n,n',p,u') = 0 - eq.(S.5)
-    % fn = np - D*MxxMixed(ntilde, par) + MA1([0;ntilde], vx1, par) - r*n.*(1-n);
-    fn = np - D*MxxMixed(ntilde, par);
+    fn = np - D*Mxx(ntilde, par) + MA1(ntilde, vx1, par) - r*n.*(1-n);
 
     %%% Equation for p
     % fp(p,p',u') = 0 - eq.(S.10)
-    fp = pp + MA1([0;ptilde], vx1, par);
+    fp = pp + MA1(ptilde, vx1, par);
 
     %%% Equation for u 
     % Traction term - eq.(S.12)-(S.14)
@@ -190,12 +171,12 @@ function f = mechanochemical(y,yp,par)
     % fp2 = pp + beta*Mxx1(pp, par); % M_T1 P'
     % Tr = tau*(a0*fn1.*fp1 + a1*(fn2.*np.*fp1+fn1.*fp2));
     Tr = a0*tau*p.*n;
-    Trtilde = [Tr; a0*tau*par.Pright*par.Nright];
+    Trtilde = [Tr(2); Tr; a0*tau*par.Pright*par.Nright];
     % Trtilde = [0; Tr; a0*tau*par.Pright*par.Nright];
     % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
-    % fu = b1*MxxDir(uptilde, par) + b0*MxxDir(utilde, par) ...
-    %    + MxMixed(Trtilde, par) - a1*s*(p.*up + pp.*u) - a0*s*p.*u; 
-    fu = up + 0.1;
+    % fu = b1*Mxx(uptilde, par) + b0*Mxx(utilde, par) ...
+    %   + Mx(Trtilde, par) - a1*s*(p.*up + pp.*u) - a0*s*p.*u; 
+    fu = b1*Mxx(uptilde, par) + b0*Mxx(utilde,par) + Mx(Trtilde, par) - a0*s*p.*u;
 
     %%% Full system - eq.(S.1)
     f = [fn; fp; fu];
@@ -204,26 +185,9 @@ end
 
 %% Annexed functions
 
-%%% Compute variable at grid cell interfaces - def.(S.3)
-% function avx1 = Avx1(y)
-%     avx1 = 0.5*(y +y([2:end,1]));
-% end
-
-%%% Compute first order derivative on grid cell interfaces 
-%%% (second order approximation, central) - def.(S.4)
-% function dx1 = Mx1_face(y, par)
-%     persistent Mdx;
-%     if size(Mdx,2) ~= size(y,1)
-%       disp('Mx1_face  : resetting persistent matrix.');  
-%       c = (1/par.dx)*sparse([-1; zeros(par.K-2,1); 1]); % First column
-%       Mdx = toeplitz(c,[c(1), c(end:-1:2)']); 
-%     end
-%     dx1 = Mdx*y;
-% end
-
 %%% Compute first order derivative on grid cell interfaces 
 %%% second order approximation, central
-function dx1 = Mxdir(y,par)
+function dx1 = Mx(y,par)
     persistent Mdx;     % Mdx is a K x K+2 matrix
     c1 = [-1; zeros(par.K-1,1)];
     cn = [zeros(par.K-1,1); 1];
@@ -231,22 +195,9 @@ function dx1 = Mxdir(y,par)
     dx1 = Mdx*y;
 end
 
-%%% Compute first order derivative on grid cell interfaces for left
-%%% Neumman, right Dirichlet
-function dx1 = MxMixed(y,par)
-    y = [y(2);y];
-    persistent Mdx;     % Mdx is a K x K+1 matrix
-    c1 = [-1; zeros(par.K-1,1)];
-    cn = [zeros(par.K-1,1); 1];
-    % this is the K-1 by K+1 matrix without the first row
-    matrix = [c1, diag(ones(par.K-1,1),1)-diag(ones(par.K-1,1),-1) ,cn];
-    Mdx = (0.5/par.dx)*matrix;
-    dx1 = Mdx*y;
-end
-
 %%% Compute second order derivative on grid cell interfaces 
 %%% second order approximation, central
-function dx2 = MxxDir(y,par)
+function dx2 = Mxx(y,par)
     persistent Mdxx;     % Mdx is a K x K+2 matrix
     c1 = [1; zeros(par.K-1,1)];
     cn = [zeros(par.K-1,1); 1];
@@ -254,50 +205,10 @@ function dx2 = MxxDir(y,par)
     dx2 = Mdxx*y;
 end
 
-%%% Compute second order derivative on grid cell interfaces for left
-%%% Neumman, right Dirichlet
-function dx2 = MxxMixed(y,par)
-    y = [y(2);y];
-    persistent Mdxx;     % Mdx is a K x K+1 matrix
-    c1 = [1; zeros(par.K-1,1)];
-    cn = [zeros(par.K-1,1); 1];
-    % this is the K-1 by K+1 matrix without the first row
-    matrix = [c1, -2*eye(par.K) + diag(ones(par.K-1,1),1) + diag(ones(par.K-1,1),-1) ,cn];
-    Mdxx = (1/par.dx/par.dx)*matrix;
-    dx2 = Mdxx*y;
-end
-
-%%% Compute first order derivative on grid cell centers
-%%% (second order approximation, central) - def.(S.2)
-% function dx1 = Mx1_center(y, par)
-%     persistent Mdx;
-%     if size(Mdx,2) ~= size(y,1)
-%       disp('Mx1_center: resetting persistent matrix.');  
-%       c = (1/(2*par.dx))*sparse([0;-1; zeros(par.K-3,1); 1]); 
-%       Mdx = toeplitz(c,[c(1), c(end:-1:2)']); 
-%     end
-%     dx1 = Mdx*y;
-% end
-
-%%% Compute second order derivative on grid cell centers
-%%% (second order approximation, central) - def.(S.2)
-% function dxx1 = Mxx1(y, par)
-%     persistent Mdxx;
-%     if size(Mdxx,2) ~= size(y,1)
-%       disp('Mxx1      : resetting persistent matrix.');  
-%       c = (1/(par.dx^2))*sparse([-2; 1; zeros(par.K-3,1); 1]);
-%       Mdxx = toeplitz(c,[c(1), c(end:-1:2)']);
-%     end
-%     dxx1 = Mdxx*y;    
-% end
-
 %%% Compute advection at grid cell interfaces using first order upwinding
 %%% with advective velocity given at grid cell interfaces - def.(S.7)
 function fluxdiffx1 = MA1(y, vel, par)
     % compute flux accross cell interfaces using first order upwinding 
-    % def.(S.8)-(S.9)
-    % ycut = y(2:end-1);
-    % flux = NaN(size(ycut));
     flux = NaN(size(y));
     for i = 2:size(y)-1
         if (vel>0)
@@ -306,11 +217,9 @@ function fluxdiffx1 = MA1(y, vel, par)
             flux(i) = vel(i)*y(i+1);
         end
     end
-    % assuming velocity is 0 at the left boundary
     flux(1) = flux(3);
     flux(end) = flux(end-1);
-    % compute flux difference per grid cell - def.(S.7) and (S.4)
-    fluxdiffx1 = Mxdir(flux,par);
+    fluxdiffx1 = Mx(flux,par);
 end
 
 %%% Plot solution 
@@ -332,8 +241,8 @@ function plot_solution(x,y,t,par,video_on,video_filename)
         subplot(1,3,1)
         plot(x,n)
         title('$n(t,x)$')
-        % ylim([0,max(2,max(n))])
-        ylim([0,12])
+        ylim([0,max(2,max(n))])
+        % ylim([0,12])
         axis square
         subplot(1,3,2)
         plot(x,p)
