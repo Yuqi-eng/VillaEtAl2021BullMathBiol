@@ -60,7 +60,7 @@ par.model = in_model;          % type of viscoelastic model
 %par.model = 'Maxwell';
 %par.model = 'Kelvin-Voigt'; 
 par.K = in_K;                  % Number of spatial grid cells
-par.L = 10;                     % Domain length
+par.L = 1;                     % Domain length
 %par.Nleft = 1;
 par.Nright = 2;
 %par.Pleft = 1;
@@ -69,7 +69,7 @@ par.Uright = 0;
 x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = x(2)-x(1);            % Cell size
 t0 = 0;                        % Initial time
-tf = 500;                    % Final time
+tf = 10;                    % Final time
 tspan = linspace(t0,tf,100);   % Time span
 
 %% Initial conditions - eq.(28)
@@ -79,14 +79,14 @@ steadystate = [ones(2*par.K,1); zeros(par.K,1)];
 % factP = 1e-2;                  % factor for random perturbation
 % y0 = steadystate+factP*randP;  % perturbed IC [n0, p0, u0] as long column
 % pos = x(1,1:end-1);             % since we're working with periodic BC for now
-% f = 1+0.5*exp(-((x-0.5*par.L)./0.2).^2);        % adding a gaussian bump
+f = 1+0.5*exp(-((x-0.5*par.L)./0.2).^2);        % adding a gaussian bump
 % f1 = 2 + 10*sin(0.1*pi.*x);
 % f2 = 1 + 0.5*x;
 f3 = 2 + 10*cos(0.05*pi.*x);
 n0 = (f3.*ones(1,par.K)).';      % cells
 % n0 = 2*ones(par.K,1);
-% p0 = (f.*ones(1,par.K)).';      % collagen
-p0 = ones(par.K,1);
+p0 = (f.*ones(1,par.K)).';      % collagen
+% p0 = ones(par.K,1);
 u0 = zeros(par.K,1);            % displacement
 % u0 = (f2.*ones(1,par.K)).';
 y0 = [n0;p0;u0];                % concactanate arrays
@@ -139,7 +139,7 @@ function f = mechanochemical(y,yp,par)
     % Parameter values
     eta = 0;      % viscosity
     E = 0;        % elasticity
-    D = 0.5;     % diffusion
+    D = 0;     % diffusion
     alpha = 0; % haptotaxis
     r = 0;        % proliferation
     s = 0;       % substrate elasticity
@@ -179,8 +179,7 @@ function f = mechanochemical(y,yp,par)
 
     %%% Equation for p
     % fp(p,p',u') = 0 - eq.(S.10)
-    % fp = pp + MA1([0;ptilde], vx1, par);
-    fp = pp;
+    fp = pp + MA1([0;ptilde], vx1, par);
 
     %%% Equation for u 
     % Traction term - eq.(S.12)-(S.14)
@@ -196,7 +195,7 @@ function f = mechanochemical(y,yp,par)
     % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
     % fu = b1*MxxDir(uptilde, par) + b0*MxxDir(utilde, par) ...
     %    + MxMixed(Trtilde, par) - a1*s*(p.*up + pp.*u) - a0*s*p.*u; 
-    fu = up;
+    fu = up + 0.1;
 
     %%% Full system - eq.(S.1)
     f = [fn; fp; fu];
@@ -235,13 +234,13 @@ end
 %%% Compute first order derivative on grid cell interfaces for left
 %%% Neumman, right Dirichlet
 function dx1 = MxMixed(y,par)
+    y = [y(2);y];
     persistent Mdx;     % Mdx is a K x K+1 matrix
-    c1 = [-1; zeros(par.K-2,1)];
-    cn = [zeros(par.K-2,1); 1];
+    c1 = [-1; zeros(par.K-1,1)];
+    cn = [zeros(par.K-1,1); 1];
     % this is the K-1 by K+1 matrix without the first row
-    matrix = [c1, diag(ones(par.K-2,1),1)-diag(ones(par.K-2,1),-1) ,cn];
-    r1 = zeros(1,par.K+1);
-    Mdx = (0.5/par.dx)*[r1; matrix];
+    matrix = [c1, diag(ones(par.K-1,1),1)-diag(ones(par.K-1,1),-1) ,cn];
+    Mdx = (0.5/par.dx)*matrix;
     dx1 = Mdx*y;
 end
 
@@ -308,7 +307,7 @@ function fluxdiffx1 = MA1(y, vel, par)
         end
     end
     % assuming velocity is 0 at the left boundary
-    flux(1) = 0;
+    flux(1) = flux(3);
     flux(end) = flux(end-1);
     % compute flux difference per grid cell - def.(S.7) and (S.4)
     fluxdiffx1 = Mxdir(flux,par);
