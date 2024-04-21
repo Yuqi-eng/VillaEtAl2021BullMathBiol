@@ -1,4 +1,4 @@
-function Simulations_1DMix(in_K, in_model)
+function Simulations_1DMix(in_K)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%                                                                     %%%
 %%%  "Mechanical models of pattern and form in biological tissues:      %%%
@@ -56,22 +56,23 @@ set(0,'defaultTextInterpreter','latex')
 
 %% Numerical set up
 par.seed = 44;                 % Seed for random number generator
-par.model = in_model;          % type of viscoelastic model
-%par.model = 'Maxwell';
-%par.model = 'Kelvin-Voigt'; 
 par.K = in_K;                  % Number of spatial grid cells
 par.L = 1;                     % Domain length
 par.Nright = 1;
 par.Pright = 1;
+par.Uleft = 0;
 par.Uright = 0;
+par.Sigleft = 0;
+par.Sigright = 0;
 x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = x(2)-x(1);            % Cell size
 t0 = 0;                        % Initial time
-tf = 10;                    % Final time
+tf = 100;                    % Final time
 tspan = linspace(t0,tf,100);   % Time span
 
 %% Initial conditions - eq.(28)
 steadystate = [ones(2*par.K,1); zeros(par.K,1)];
+% steadystate = [ones(2*par.K,1); zeros(2*par.K,1)];
 f = 1+0.5*exp(-((x-0.5*par.L)./0.2).^2);        % adding a gaussian bump
 % f1 = 2 + 10*sin(0.1*pi.*x);
 % f2 = 1 + 0.5*x;
@@ -82,7 +83,9 @@ n0 = (f.*ones(1,par.K)).';      % cells
 p0 = ones(par.K,1);
 u0 = zeros(par.K,1);            % displacement
 % u0 = (f2.*ones(1,par.K)).';
-y0 = [n0;p0;u0];                % concactanate arrays
+Sig0 = zeros(par.K,1);
+% y0 = [n0;p0;u0;Sig0];                % concactanate arrays
+y0 = [n0;p0;u0];
 
 %% Solve with ODE15i
 %%% Compute consistent yp0 
@@ -90,15 +93,14 @@ y0 = [n0;p0;u0];                % concactanate arrays
 res = @(y,yp)(norm(mechanochemical(y,yp,par)));
 disp(['residuum of steady state = ' ...
     num2str(res(steadystate,0*steadystate), '%15.10e')]);
-% [y0,yp0,resnorm] = decic(@(t,y,yp)(mechanochemical(y,yp,par)), t0, ...
-%     y0, ones(3*par.K,1), zeros(3*par.K,1), zeros(3*par.K,1));
 opt = odeset('RelTol', 10.0^(-7), 'AbsTol' , 10.0^(-7));
 nfixed = zeros(par.K,1);
 pfixed = zeros(par.K,1);
 ufixed = zeros(par.K,1);
+Sigfixed = zeros(par.K,1);
 [y0,yp0,resnorm] = decic(@(t,y,yp)(mechanochemical(y,yp,par)), t0, ...
     y0, [nfixed; pfixed; ufixed], ...
-    [zeros(2*par.K,1); zeros(par.K,1)], zeros(3*par.K,1), opt);
+    [zeros(3*par.K,1)], zeros(3*par.K,1), opt);
 disp(['residuum (from decic) of IC = ' num2str(resnorm, '%15.10e')]);
 disp(['residuum (from res()) of IC = ' num2str(res(y0,yp0), '%15.10e')]);
 %% Solve
@@ -106,7 +108,7 @@ tic
 [t,y] = ode15i(@(t,y,yp)(mechanochemical(y,yp,par)),tspan,y0,yp0);
 toc
 %%% Save computed solution to file
-filename = ['saved_y1D_' par.model '_' num2str(par.K)];
+filename = ['saved_y1D_' num2str(par.K)];
 save(filename, 't', 'y', 'par', 'x');
 
 %% Plot
@@ -122,64 +124,56 @@ function f = mechanochemical(y,yp,par)
     eta = 1;      % viscosity
     E = 1;        % elasticity
     D = 0.01;     % diffusion
-    alpha = 0; % haptotaxis
-    r = 1;        % proliferation
-    s = 1;       % substrate elasticity
-    beta = 0; % long range traction 
-    lambda = 0; % (cell traction) saturation coefficient
-    tau = 0.01;    % cell traction 
-    
-    %%% Choose constitutive model (see Table 1)
-    switch par.model
-        case 'Kelvin-Voigt' % Kelvin Voigt  - eq.(3)
-            %[a0,a1,b0,b1] = deal(1,0,E,eta); 
-            [a0,a1,b0,b1] = deal(1,0,E,eta);
-        case 'Maxwell' % Maxwell - eq.(4)
-            [a0,a1,b0,b1] = deal(1/eta,1/E,0,1);
-        otherwise
-            error('Unknown constitutive model')
-    end
+    r = 0;        % proliferation
+    s = 1;        % substrate elasticity
+    tau = 0.9;   % cell traction 
+    an = 1;       % cell recruitment rate
+    dn = 1;       % cell decay rate
+    m = 0;      % collagen production rate
+    dp = 0;     % collagen decay rate
+    a1 = 1;     % stress related recruitment rate
     
     %%% Reshape input vectors
+    % [n,p,u,Sig] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K),y(3*par.K+1:4*par.K));
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
     ntilde = [n(2); n; par.Nright]; 
     ptilde = [p(2); p; par.Pright]; 
-    utilde = [0; u; par.Uright];
+    utilde = [par.Uleft; u; par.Uright];
+    % Sigtilde = [par.Sigleft; Sig; par.Sigright];
+    % [np,pp,up,Sigp] = deal(yp(1:par.K),yp(par.K+1:2*par.K),...
+    %     yp(2*par.K+1:3*par.K),yp(3*par.K+1:4*par.K));
     [np,pp,up] = deal(yp(1:par.K),yp(par.K+1:2*par.K),...
-        yp(2*par.K+1:3*par.K));
-    % up = [-0.1*ones(par.K,1)];
+         yp(2*par.K+1:3*par.K));
     uptilde = [0; up; 0];
     
     %%% Equation for n
     % Advection velocity at grid cell interfaces - eq.(S.6)
-    % up_Avx1 = Avx1(up); 
-    % vx1 = alpha*Mx1(p,par) + up_Avx1; 
     vx1 = uptilde;
     % fn(n,n',p,u') = 0 - eq.(S.5)
-    fn = np - D*Mxx(ntilde, par) + MA1(ntilde, vx1, par) - r*n.*(1-n);
+    fn = np - D*Mxx(ntilde, par) + MA1(ntilde, vx1, par) - an*ones(size(n)) + dn*n - r*n.*(1-n);
 
     %%% Equation for p
     % fp(p,p',u') = 0 - eq.(S.10)
-    fp = pp + MA1(ptilde, vx1, par);
+    fp = pp + MA1(ptilde, vx1, par) - m*n + dp*p;
 
     %%% Equation for u 
     % Traction term - eq.(S.12)-(S.14)
-    % pexp = 2; 
-    % fn1 = n./(1+lambda*n.^pexp); % Lambda_1
-    % fn2 = ((1-(pexp-1)*lambda*n.^pexp)./((1+lambda*n.^pexp).^2)); %Lambda_2
-    % fp1 = p + beta*Mxx1(ptilde, par); % M_T1 P
-    % fp2 = pp + beta*Mxx1(pp, par); % M_T1 P'
-    % Tr = tau*(a0*fn1.*fp1 + a1*(fn2.*np.*fp1+fn1.*fp2));
-    Tr = a0*tau*p.*n;
-    Trtilde = [Tr(2); Tr; a0*tau*par.Pright*par.Nright];
-    % Trtilde = [0; Tr; a0*tau*par.Pright*par.Nright];
+    % n0 = 1/2*par.L*ones(size(n));
+    % k1 = 10;
+    % h1 = (n.^k1)./(n0.^k1 + n.^k1);
+    Tr = tau*p.*n;
+    Trtilde = [Tr(2); Tr; tau*par.Pright*par.Nright];
     % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
-    % fu = b1*Mxx(uptilde, par) + b0*Mxx(utilde, par) ...
-    %   + Mx(Trtilde, par) - a1*s*(p.*up + pp.*u) - a0*s*p.*u; 
-    fu = b1*Mxx(uptilde, par) + b0*Mxx(utilde,par) + Mx(Trtilde, par) - a0*s*p.*u;
+    fu = eta*Mxx(uptilde, par) + E*Mxx(utilde,par) + Mx(Trtilde, par) - s*p.*u;
+    % fu = Mx(Sigtilde, par) - s*p.*u;
+
+    %%% Equation for stress
+    % fSig = Sigp;
+    % fSig = Sig - eta*Mx(uptilde, par) - E*Mx(utilde,par) - Tr;
 
     %%% Full system - eq.(S.1)
-    f = [fn; fp; fu];
+    % f = [fn; fp; fu; fSig];
+    f = [fn; fp ;fu];
 end
     
 
@@ -235,6 +229,7 @@ function plot_solution(x,y,t,par,video_on,video_filename)
         n = [y(i,1:par.K)];
         p = [y(i,par.K+1:2*par.K)];
         u = [y(i,2*par.K+1:3*par.K)];
+        % Sig = [y(i,3*par.K+1:4*par.K)];
         if max(abs(u))>maxu
           maxu = max(abs(u))+0.1*max(abs(u));
         end
@@ -253,9 +248,14 @@ function plot_solution(x,y,t,par,video_on,video_filename)
         plot(x,u)
         title('$u(t,x)$')
         axis square
-        ylim([-maxu,maxu])
+        % ylim([-maxu,maxu])
+        % subplot(1,4,4)
+        % plot(x,Sig)
+        % title('$Sig(t,x)$')
+        % axis square
+        % ylim([min(Sig), max(Sig)])
         a = axes;
-        t1 = title([par.model ' (t=',num2str(t(i)),')']);
+        t1 = title([' (t=',num2str(t(i)),')']);
         a.Visible = 'off'; 
         t1.Visible = 'on'; 
         drawnow
