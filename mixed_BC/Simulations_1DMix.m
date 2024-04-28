@@ -54,30 +54,28 @@ set(0,'defaultlinelinewidth',2)
 set(0,'defaultTextInterpreter','latex')
 
 %% Numerical set up
-par.K = in_K;                  % Number of spatial grid cells
-par.L = 1;                     % Domain length
+par.K = in_K;                    % Number of spatial grid cells
+par.L = 1;                       % Domain length
 par.Nright = 1;
 par.Pright = 1;
 par.Uleft = 0;
 par.Uright = 0;
 x = linspace(0,par.L,par.K);
 par.x = linspace(0,par.L,par.K); % Discretise spatial domain
-par.dx = par.x(2)-par.x(1);            % Cell size
-t0 = 0;                        % Initial time
-tf = 10;                    % Final time
-tspan = linspace(t0,tf,100);   % Time span
+par.dx = par.x(2)-par.x(1);      % Cell size
+t0 = 0;                          % Initial time
+tf = 200;                         % Final time
+tspan = linspace(t0,tf,100);     % Time span
 %% Initial conditions - eq.(28)
 steadystate = [ones(2*par.K,1); zeros(par.K,1)];
-% steadystate = [ones(2*par.K,1); zeros(2*par.K,1)];
-% f = 1+0.5*exp(-((par.x-0.5*par.L)./0.2).^2);        % adding a gaussian bump
 f = 1+0.5*exp(-((par.x)./0.2).^2);
 % f1 = 2 + 10*sin(0.1*pi.*par.x);
 % f2 = 1 + 0.5*par.x;
 % f3 = 2 + 10*cos(0.05*pi.*par.x);
-% n0 = (f.*ones(1,par.K)).';      % cells
-n0 = ones(par.K,1);
-p0 = (f.*ones(1,par.K)).';      % collagen
-% p0 = ones(par.K,1);
+n0 = (f.*ones(1,par.K)).';      % cells
+% n0 = ones(par.K,1);
+% p0 = (f.*ones(1,par.K)).';      % collagen
+p0 = ones(par.K,1);
 u0 = zeros(par.K,1);            % displacement
 % u0 = sin(pi.*x+pi/2);
 % u0 = (f2.*ones(1,par.K)).';
@@ -109,8 +107,7 @@ save(filename, 't', 'y', 'par', 'x');
 %% Plot
 video_on = true; % Record video: YES (true), NO (false)
 video_filename = [filename '.avi'];
-plot_transport(x,y,t,par,video_on,video_filename);
-
+plot_solution(x,y,t,par,video_on,video_filename);
 end
 
 %% Main function implementing the model
@@ -124,38 +121,29 @@ function f = mechanochemical(y,yp,par)
     tau = 0.5;   % cell traction 
     an = 1;       % cell recruitment rate
     dn = 1;       % cell decay rate
-    m = 0;      % collagen production rate
-    dp = 0;     % collagen decay rate
+    m = 1;      % collagen production rate
+    dp = 1;     % collagen decay rate
     a1 = 0;     % stress related recruitment rate
     
     %%% Reshape input vectors
-    % [n,p,u,Sig] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K),y(3*par.K+1:4*par.K));
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
     ntilde = [n(2); n; par.Nright]; 
     ptilde = [p(2); p; par.Pright]; 
     utilde = [par.Uleft; u; par.Uright];
-    % utilde = [par.Uleft; u; u(end-1)];
-    % Sigtilde = [par.Sigleft; Sig; par.Sigright];
-    % [np,pp,up,Sigp] = deal(yp(1:par.K),yp(par.K+1:2*par.K),...
-    %     yp(2*par.K+1:3*par.K),yp(3*par.K+1:4*par.K));
     [np,pp,up] = deal(yp(1:par.K),yp(par.K+1:2*par.K),...
          yp(2*par.K+1:3*par.K));
     uptilde = [0; up; 0];
-    % uptilde = [0; up; up(end-1)];
     
     %%% Equation for n
     % Advection velocity at grid cell interfaces - eq.(S.6)
-    vx1 = uptilde;
     Tr = tau*p.*n;
     sig = eta*Mx(uptilde, par) + E*Mx(utilde,par) + Tr;
     % fn(n,n',p,u') = 0 - eq.(S.5)
-    % fn = np - D*Mxx(ntilde, par) + MA2(ntilde, vx1, par) + a1*sig - an*ones(size(n)) + dn*n - r*n.*(1-n);
-    fn = np;
+    fn = np - D*Mxx(ntilde, par) + MA1(ntilde, up, par) + a1*sig - an*ones(size(n)) + dn*n - r*n.*(1-n);
 
     %%% Equation for p
     % fp(p,p',u') = 0 - eq.(S.10)
     fp = pp + MA1(ptilde, up, par) - m*n + dp*p;
-    % fp = pp;
 
     %%% Equation for u 
     % Traction term - eq.(S.12)-(S.14)
@@ -170,15 +158,12 @@ function f = mechanochemical(y,yp,par)
     % displacment BCs no longer gets distorted. 
     % Trtilde = [Tr(2); Tr; Tr(end-1)];
     % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
-    % fu = eta*Mxx(uptilde, par) + E*Mxx(utilde,par) + Trx(Trtilde, par, tau) - s*p.*u;
+    fu = eta*Mxx(uptilde, par) + E*Mxx(utilde,par) + Trx(Trtilde, par, tau) - s*p.*u;
     % fu = up - 0.1*sin(pi.*par.x+pi/2).';
-    fu = up - 0.1*sin(pi.*par.x+pi/2).';
-    % fu = up + 0.1;
 
     %%% Full system - eq.(S.1)
     f = [fn; fp; fu];
 end
-    
 
 %% Annexed functions
 
@@ -205,7 +190,7 @@ end
 function trgradient = Trx(Trtilde, par, tau)
     trgradient = Mx(Trtilde, par);
     trgradient(1) = 0;
-    trgradient(end) = (1/par.dx)*(tau-Trtilde(end-2));
+    trgradient(end) = (0.5/par.dx)*(tau-Trtilde(end-2));
 end
 
 %%% Compute advection at grid cell interfaces using first order upwinding
