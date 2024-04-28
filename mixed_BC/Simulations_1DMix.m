@@ -70,14 +70,14 @@ tspan = linspace(t0,tf,100);   % Time span
 steadystate = [ones(2*par.K,1); zeros(par.K,1)];
 % steadystate = [ones(2*par.K,1); zeros(2*par.K,1)];
 % f = 1+0.5*exp(-((par.x-0.5*par.L)./0.2).^2);        % adding a gaussian bump
-f = 1+0.5*exp(-((par.x-par.L)./0.2).^2);
+f = 1+0.5*exp(-((par.x)./0.2).^2);
 % f1 = 2 + 10*sin(0.1*pi.*par.x);
 % f2 = 1 + 0.5*par.x;
 % f3 = 2 + 10*cos(0.05*pi.*par.x);
 % n0 = (f.*ones(1,par.K)).';      % cells
 n0 = ones(par.K,1);
-% p0 = (f.*ones(1,par.K)).';      % collagen
-p0 = ones(par.K,1);
+p0 = (f.*ones(1,par.K)).';      % collagen
+% p0 = ones(par.K,1);
 u0 = zeros(par.K,1);            % displacement
 % u0 = sin(pi.*x+pi/2);
 % u0 = (f2.*ones(1,par.K)).';
@@ -172,7 +172,7 @@ function f = mechanochemical(y,yp,par)
     % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
     % fu = eta*Mxx(uptilde, par) + E*Mxx(utilde,par) + Trx(Trtilde, par, tau) - s*p.*u;
     % fu = up - 0.1*sin(pi.*par.x+pi/2).';
-    fu = up - 0.1*sin(pi.*par.x+3*pi/2).';
+    fu = up - 0.1*sin(pi.*par.x+pi/2).';
     % fu = up + 0.1;
 
     %%% Full system - eq.(S.1)
@@ -245,35 +245,8 @@ function fluxdiffx1 = MA1(y, vel, par)
 
     % compute flux difference per grid cell - def.(S.7) and (S.4)
     fluxdiffx1 = Mx([flux(2); flux; flux(end-1)],par);
-end
-
-
-%%% centered in space
-function fluxdiffx2 = MA2(y, vel, par)
-    flux = NaN(size(y));
-    for i = 2:size(y)-1
-        flux(i) = vel(i)*y(i);
-        if (vel(i-1)>0)
-            flux(i) = flux(i) + vel(i-1)*y(i-1);
-        end
-        if (vel(i+1)<0)
-            flux(i) = flux(i) - vel(i+1)*y(i+1);
-        end
-    end
-    % for i = 2:size(y)-1
-    %     if (vel(i)>0)
-    %         flux(i) = vel(i)*y(i);
-    %     else 
-    %         flux(i) = vel(i)*y(i+1);
-    %     end
-    % end
-    flux(1) = 0;
-    flux(end) = 0;
-    fluxdiffx2 = Mx(flux,par);
-    % fluxdiffx2(1) = 0;
-    fluxdiffx2(1) = (1/par.dx)*(flux(3)-flux(2));
-    % fluxdiffx2(1) = vel(3);
-    fluxdiffx2(end) = 0;
+    fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
+    fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
 end
 
 %%% Plot solution 
@@ -343,8 +316,7 @@ function plot_transport(x,y,t,par,video_on,video_filename)
         clf
         p = [y(i,par.K+1:2*par.K)];
         u = [y(i,2*par.K+1:3*par.K)];
-        % v = 0.1*sin(pi.*par.x+pi/2);
-        v = 0.1*sin(pi.*par.x+3*pi/2);
+        v = 0.1*sin(pi.*par.x+pi/2);
         subplot(1,3,1)
         plot(x,p)
         title('$p(t,x)$')
