@@ -1,48 +1,4 @@
 function Simulations_1DMix(in_K)
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%                                                                     %%%
-%%%  "Mechanical models of pattern and form in biological tissues:      %%%
-%%%       the role of stress-strain constitutive equations"             %%%
-%%%                                                                     %%%
-%%%      C. Villa (*), M.A.J. Chaplain, A. Gerisch (**), T. Lorenzi     %%%
-%%%                                                                     %%%
-%%%            Bullettin of Mathematical Biology (2021)                 %%%
-%%%                                                                     %%%
-%%%                                                                     %%%
-%%% (*) cv23[at]st-andrews.ac.uk                                        %%%
-%%% (**) gerisch[at]mathematik.tu-darmstadt.de                          %%%
-%%%                                                                     %%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%  1D Simulations (Kelvin-Voigt and Maxwell models)                   %%%
-%%%  For details about the equations and schemes please see the         %%%
-%%%  manuscript indicated above and the supplementary material          %%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-% function Simulations_1D(in_K, in_model)
-% Runs the spatially one-dimensional simulation using viscoelastic 
-% model in_model (either 'Maxwell' or 'Kelvin-Voigt') on a uniform grid
-% with in_K grid cells. 
-% The results are saved in file saved_y1D_[in_model]_[in_K].mat and 
-% a video in saved_y1D_[in_model]_[in_K].avi .
-%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%% Simulations_1D.m: simulates a 1D mechanical model of pattern formation%
-%%% Copyright (C) 2021 C. Villa and A. Gerisch                            %
-%%%                                                                       %
-%%% This program is free software: you can redistribute it and/or modify  %
-%%% it under the terms of the GNU General Public License as published by  %
-%%% the Free Software Foundation, either version 3 of the License, or     %
-%%% (at your option) any later version.                                   %
-%%%                                                                       %
-%%% This program is distributed in the hope that it will be useful,       %
-%%% but WITHOUT ANY WARRANTY; without even the implied warranty of        %
-%%% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         %
-%%% GNU General Public License for more details.                          %
-%%%                                                                       %
-%%% You should have received a copy of the GNU General Public License     %
-%%% along with this program.  If not, see <https://www.gnu.org/licenses/>.%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 clc
 close all
 
@@ -64,8 +20,9 @@ x = linspace(0,par.L,par.K);
 par.x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = par.x(2)-par.x(1);      % Cell size
 t0 = 0;                          % Initial time
-tf = 200;                         % Final time
+tf = 20;                         % Final time
 tspan = linspace(t0,tf,100);     % Time span
+% dt = tspan(2)-tspan(1);
 %% Initial conditions - eq.(28)
 steadystate = [ones(2*par.K,1); zeros(par.K,1)];
 f = 1+0.5*exp(-((par.x)./0.2).^2);
@@ -80,10 +37,8 @@ u0 = zeros(par.K,1);            % displacement
 % u0 = sin(pi.*x+pi/2);
 % u0 = (f2.*ones(1,par.K)).';
 y0 = [n0;p0;u0];
-
 %% Solve with ODE15i
 %%% Compute consistent yp0 
-%res = @(y,yp)(norm(mechanochemical(y,yp,par),'inf'));
 res = @(y,yp)(norm(mechanochemical(y,yp,par)));
 disp(['residuum of steady state = ' ...
     num2str(res(steadystate,0*steadystate), '%15.10e')]);
@@ -96,18 +51,24 @@ ufixed = zeros(par.K,1);
     [zeros(3*par.K,1)], zeros(3*par.K,1), opt);
 disp(['residuum (from decic) of IC = ' num2str(resnorm, '%15.10e')]);
 disp(['residuum (from res()) of IC = ' num2str(res(y0,yp0), '%15.10e')]);
+
 %% Solve
 tic
 [t,y] = ode15i(@(t,y,yp)(mechanochemical(y,yp,par)),tspan,y0,yp0);
+sol = ode15i(@(t,y,yp)(mechanochemical(y,yp,par)),tspan,y0,yp0);
+% tfinal = sol.stats.tfinal;
+% t = linspace(t0,tfinal,tfinal/dt+1);
+t = t.';
+[y,yp] = deval(sol,t);
 toc
 %%% Save computed solution to file
 filename = ['saved_y1D_' num2str(par.K)];
-save(filename, 't', 'y', 'par', 'x');
-
+% save(filename, 't', 'x', 'y', 'par');
+save(filename, 't', 'y', 'par', 'x', 'yp');
 %% Plot
 video_on = true; % Record video: YES (true), NO (false)
 video_filename = [filename '.avi'];
-plot_solution(x,y,t,par,video_on,video_filename);
+plot_solution(x,y,yp,t,par,video_on,video_filename);
 end
 
 %% Main function implementing the model
@@ -117,19 +78,19 @@ function f = mechanochemical(y,yp,par)
     E = 1;        % elasticity
     D = 0.01;     % diffusion
     r = 0;        % proliferation
-    s = 1;        % substrate elasticity
+    s = 5;        % substrate elasticity
     tau = 0.5;   % cell traction 
     an = 1;       % cell recruitment rate
     dn = 1;       % cell decay rate
-    m = 1;      % collagen production rate
-    dp = 1;     % collagen decay rate
+    m = 0;      % collagen production rate
+    dp = 0;     % collagen decay rate
     a1 = 0;     % stress related recruitment rate
     
     %%% Reshape input vectors
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
     ntilde = [n(2); n; par.Nright]; 
     ptilde = [p(2); p; par.Pright]; 
-    utilde = [par.Uleft; u; par.Uright];
+    utilde = [0; u; 0];
     [np,pp,up] = deal(yp(1:par.K),yp(par.K+1:2*par.K),...
          yp(2*par.K+1:3*par.K));
     uptilde = [0; up; 0];
@@ -152,13 +113,8 @@ function f = mechanochemical(y,yp,par)
     h1 = (n.^k1)./(n0.^k1 + n.^k1);
     Tr = tau*p.*n;
     Trtilde = [Tr(2); Tr; tau*ptilde(end)*ntilde(end)];
-    % Trtilde = [tau*p(2)*n(2); Tr; tau*ptilde(end)*ntilde(end)];
-    % Trtilde = [Tr(2); tau*conv(p,n, "same"); tau*ptilde(end)*ntilde(end)];
-    % I don't know why but when I have this scheme for traction force the
-    % displacment BCs no longer gets distorted. 
-    % Trtilde = [Tr(2); Tr; Tr(end-1)];
     % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
-    fu = eta*Mxx(uptilde, par) + E*Mxx(utilde,par) + Trx(Trtilde, par, tau) - s*p.*u;
+    fu = eta*Mxx(uptilde, par) + E*Mxx(utilde,par) + Mx(Trtilde, par) - s*p.*u;
     % fu = up - 0.1*sin(pi.*par.x+pi/2).';
 
     %%% Full system - eq.(S.1)
@@ -187,10 +143,27 @@ function dx2 = Mxx(y,par)
     dx2 = Mdxx*y;
 end
 
-function trgradient = Trx(Trtilde, par, tau)
-    trgradient = Mx(Trtilde, par);
-    trgradient(1) = 0;
-    trgradient(end) = (0.5/par.dx)*(tau-Trtilde(end-2));
+%%% Computing second order derivative for displacement, without enforcing
+%%% BCs
+function dx2 = Mxxu(y,par)
+    persistent Mdxx;     % Mdx is a K x K+2 matrix
+    c1 = [1; zeros(par.K-1,1)];
+    cn = [zeros(par.K-1,1); 1];
+    Mdxx = (1/par.dx/par.dx)*[c1, -2*eye(par.K) + diag(ones(par.K-1,1),1) + diag(ones(par.K-1,1),-1) ,cn];
+    dx2 = Mdxx*y;
+    uxx = Mxu([0; Mxu(y,par); 0],par);
+    dx2(1) = uxx(1);
+    dx2(end) = uxx(end);
+end
+
+function dx1 = Mxu(y,par)
+    persistent Mdx;     % Mdx is a K x K+2 matrix
+    c1 = [-1; zeros(par.K-1,1)];
+    cn = [zeros(par.K-1,1); 1];
+    Mdx = (0.5/par.dx)*[c1, diag(ones(par.K-1,1),1)-diag(ones(par.K-1,1),-1) ,cn];
+    dx1 = Mdx*y;
+    dx1(1) = (1/par.dx)*(y(3)-y(2));
+    dx1(end) = (1/par.dx)*(y(end-1)-y(end-2));
 end
 
 %%% Compute advection at grid cell interfaces using first order upwinding
@@ -216,9 +189,9 @@ function fluxdiffx1 = MA1(y, vel, par)
 
     % for flux at the left Neumann boundary
     if vel(1)<0
-    flux(1) = vel(1)*yavg(1);
+        flux(1) = vel(1)*yavg(1);
     else
-    flux(1) = vel(1)*y(1);
+        flux(1) = vel(1)*y(1);
     end
     
     % for flux at the right boundary
@@ -229,13 +202,13 @@ function fluxdiffx1 = MA1(y, vel, par)
     end
 
     % compute flux difference per grid cell - def.(S.7) and (S.4)
-    fluxdiffx1 = Mx([flux(2); flux; flux(end-1)],par);
+    fluxdiffx1 = Mx([0; flux; 0],par);
     fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
     fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
 end
 
 %%% Plot solution 
-function plot_solution(x,y,t,par,video_on,video_filename)
+function plot_solution(x,y,yp,t,par,video_on,video_filename)
     if video_on % Initialise video
         vid = VideoWriter(video_filename);
         open(vid);
@@ -244,35 +217,31 @@ function plot_solution(x,y,t,par,video_on,video_filename)
     maxu = 10^(-6);
     for i=1:length(t)
         clf
-        n = [y(i,1:par.K)];
-        p = [y(i,par.K+1:2*par.K)];
-        u = [y(i,2*par.K+1:3*par.K)];
+        n = [y(1:par.K,i)];
+        p = [y(par.K+1:2*par.K,i)];
+        u = [y(2*par.K+1:3*par.K,i)];
+        v = [yp(2*par.K+1:3*par.K,i)];
         if max(abs(u))>maxu
           maxu = max(abs(u))+0.1*max(abs(u));
         end
-        subplot(1,3,1)
+        subplot(1,4,1)
         plot(x,n)
         title('$n(t,x)$')
-        % ylim([0,1.5])
         % ylim([0,max(2,max(n))])
-        % ylim([0,12])
         axis square
-        subplot(1,3,2)
+        subplot(1,4,2)
         plot(x,p)
         title('$\rho(t,x)$')
-        % ylim([0,1.5])
         % ylim([0,max(2,max(p))])
         axis square
-        subplot(1,3,3)
+        subplot(1,4,3)
         plot(x,u)
         title('$u(t,x)$')
         axis square
-        % ylim([-maxu,maxu])
-        % subplot(1,4,4)
-        % plot(x,Sig)
-        % title('$Sig(t,x)$')
-        % axis square
-        % ylim([min(Sig), max(Sig)])
+        subplot(1,4,4)
+        plot(x,v)
+        title('$v(t,x)$')
+        axis square
         a = axes;
         t1 = title([' (t=',num2str(t(i)),')']);
         a.Visible = 'off'; 
