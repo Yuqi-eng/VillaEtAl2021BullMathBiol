@@ -82,8 +82,8 @@ function f = mechanochemical(y,yp,par)
     tau = 0.5;    % cell traction 
     an = 1;       % cell recruitment rate
     dn = 1;       % cell decay rate
-    m = 1;      % collagen production rate
-    dp = 1;     % collagen decay rate
+    m = 0;      % collagen production rate
+    dp = 0;     % collagen decay rate
     a1 = 0;       % stress related recruitment rate
     
     %%% Reshape input vectors
@@ -106,17 +106,17 @@ function f = mechanochemical(y,yp,par)
     %%% Equation for p
     % fp(p,p',u') = 0 - eq.(S.10)
     fp = pp - Dp*Mxx(ptilde,par) + MA1(ptilde, up, par) - m*n + dp*p;
-    %fp = pp;
+    % fp = pp;
 
     %%% Equation for u 
     % Traction term - eq.(S.12)-(S.14)
     n0 = 1.25;
-    k1 = 4;
+    k1 = 1;
     h1 = (n.^k1)./(n0.^k1 + n.^k1);
-    Tr = tau*p.*n;
+    Tr = tau*p.*h1;
     Trtilde = [Tr(2); Tr; tau*ptilde(end)*ntilde(end)];
     % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
-    fu = eta*Mxxu(uptilde, par) + E*Mxxu(utilde,par) + Mx(Trtilde, par) + 0*Trx(Trtilde,par) - s*p.*u;
+    fu = eta*MxxfreeRrightBC(uptilde, par) + E*MxxfreeRrightBC(utilde,par) + Mx(Trtilde, par) + 0*Trx(Trtilde,par) - s*p.*u;
     % fu = up - 0.1*sin(pi.*par.x+pi/2).';
     % fu = up + 0.1;
 
@@ -148,7 +148,7 @@ end
 
 %%% Computing second order derivative for displacement, without enforcing
 %%% BCs
-function dx2 = Mxxu(y,par)
+function dx2 = MxxfreeRrightBC(y,par)
     persistent Mdxx;     % Mdx is a K x K+2 matrix
     c1 = [1; zeros(par.K-1,1)];
     cn = [zeros(par.K-1,1); 1];
