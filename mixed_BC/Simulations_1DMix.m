@@ -8,7 +8,6 @@ set(0,'defaultaxeslinewidth',1)
 set(0,'defaultpatchlinewidth',1)
 set(0,'defaultlinelinewidth',2)
 set(0,'defaultTextInterpreter','latex')
-
 %% Numerical set up
 par.K = in_K;                    % Number of spatial grid cells
 par.L = 1;                       % Domain length
@@ -20,7 +19,7 @@ x = linspace(0,par.L,par.K);
 par.x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = par.x(2)-par.x(1);      % Cell size
 t0 = 0;                          % Initial time
-tf = 10000;                         % Final time
+tf = 100;                         % Final time
 tspan = linspace(t0,tf,100);     % Time span
 % dt = tspan(2)-tspan(1);
 %% Initial conditions - eq.(28)
@@ -77,15 +76,15 @@ function f = mechanochemical(y,yp,par)
     eta = 1;      % viscosity
     E = 1;        % elasticity
     D = 0.01;     % diffusion
-    Dp = 1e-4;
+    Dp = 1e-4;    % diffusion for collagen
     r = 0;        % proliferation
     s = 5;        % substrate elasticity
-    tau = 0.5;   % cell traction 
+    tau = 0.5;    % cell traction 
     an = 1;       % cell recruitment rate
     dn = 1;       % cell decay rate
-    m = 0;      % collagen production rate
-    dp = 0;     % collagen decay rate
-    a1 = 0;     % stress related recruitment rate
+    m = 1;      % collagen production rate
+    dp = 1;     % collagen decay rate
+    a1 = 0;       % stress related recruitment rate
     
     %%% Reshape input vectors
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
@@ -111,8 +110,8 @@ function f = mechanochemical(y,yp,par)
 
     %%% Equation for u 
     % Traction term - eq.(S.12)-(S.14)
-    n0 = 1.5;
-    k1 = 10;
+    n0 = 1.25;
+    k1 = 4;
     h1 = (n.^k1)./(n0.^k1 + n.^k1);
     Tr = tau*p.*n;
     Trtilde = [Tr(2); Tr; tau*ptilde(end)*ntilde(end)];
