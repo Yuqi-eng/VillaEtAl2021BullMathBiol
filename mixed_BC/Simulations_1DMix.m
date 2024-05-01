@@ -20,7 +20,7 @@ x = linspace(0,par.L,par.K);
 par.x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = par.x(2)-par.x(1);      % Cell size
 t0 = 0;                          % Initial time
-tf = 20;                         % Final time
+tf = 10000;                         % Final time
 tspan = linspace(t0,tf,100);     % Time span
 % dt = tspan(2)-tspan(1);
 %% Initial conditions - eq.(28)
@@ -42,7 +42,7 @@ y0 = [n0;p0;u0];
 res = @(y,yp)(norm(mechanochemical(y,yp,par)));
 disp(['residuum of steady state = ' ...
     num2str(res(steadystate,0*steadystate), '%15.10e')]);
-opt = odeset('RelTol', 10.0^(-7), 'AbsTol' , 10.0^(-7));
+opt = odeset('RelTol', 10.0^(-7), 'AbsTol', 10.0^(-7));
 nfixed = zeros(par.K,1);
 pfixed = zeros(par.K,1);
 ufixed = zeros(par.K,1);
@@ -77,6 +77,7 @@ function f = mechanochemical(y,yp,par)
     eta = 1;      % viscosity
     E = 1;        % elasticity
     D = 0.01;     % diffusion
+    Dp = 1e-4;
     r = 0;        % proliferation
     s = 5;        % substrate elasticity
     tau = 0.5;   % cell traction 
@@ -101,10 +102,12 @@ function f = mechanochemical(y,yp,par)
     sig = eta*Mx(uptilde, par) + E*Mx(utilde,par) + Tr;
     % fn(n,n',p,u') = 0 - eq.(S.5)
     fn = np - D*Mxx(ntilde, par) + MA1(ntilde, up, par) + a1*sig - an*ones(size(n)) + dn*n - r*n.*(1-n);
+    % fn = np;
 
     %%% Equation for p
     % fp(p,p',u') = 0 - eq.(S.10)
-    fp = pp + MA1(ptilde, up, par) - m*n + dp*p;
+    fp = pp - Dp*Mxx(ptilde,par) + MA1(ptilde, up, par) - m*n + dp*p;
+    %fp = pp;
 
     %%% Equation for u 
     % Traction term - eq.(S.12)-(S.14)
@@ -114,8 +117,9 @@ function f = mechanochemical(y,yp,par)
     Tr = tau*p.*n;
     Trtilde = [Tr(2); Tr; tau*ptilde(end)*ntilde(end)];
     % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
-    fu = eta*Mxx(uptilde, par) + E*Mxx(utilde,par) + Mx(Trtilde, par) - s*p.*u;
+    fu = eta*Mxxu(uptilde, par) + E*Mxxu(utilde,par) + Mx(Trtilde, par) + 0*Trx(Trtilde,par) - s*p.*u;
     % fu = up - 0.1*sin(pi.*par.x+pi/2).';
+    % fu = up + 0.1;
 
     %%% Full system - eq.(S.1)
     f = [fn; fp; fu];
@@ -152,8 +156,25 @@ function dx2 = Mxxu(y,par)
     Mdxx = (1/par.dx/par.dx)*[c1, -2*eye(par.K) + diag(ones(par.K-1,1),1) + diag(ones(par.K-1,1),-1) ,cn];
     dx2 = Mdxx*y;
     uxx = Mxu([0; Mxu(y,par); 0],par);
-    dx2(1) = uxx(1);
+    % dx2(1) = uxx(1);
     dx2(end) = uxx(end);
+end
+
+% function dx2 = MxxrightDir(y,par)
+%     persistent Mdxx;     % Mdx is a K x K+2 matrix
+%     c1 = [1; zeros(par.K-1,1)];
+%     cn = [zeros(par.K-1,1); 1];
+%     Mdxx = (1/par.dx/par.dx)*[c1, -2*eye(par.K) + diag(ones(par.K-1,1),1) + diag(ones(par.K-1,1),-1) ,cn];
+%     dx2 = Mdxx*y;
+%     uxx = Mxu([0; Mxu(y,par); 0],par);
+%     dx2(1) = uxx(1);
+%     dx2(end) = uxx(end);
+% end
+
+function trgrad = Trx(y,par)
+    trgrad = Mx(y,par);
+    trgrad(1) = (y(2)-y(1))/par.dx;
+    trgrad(end) = (y(end)-y(end-1))/par.dx;
 end
 
 function dx1 = Mxu(y,par)
@@ -168,6 +189,9 @@ end
 
 %%% Compute advection at grid cell interfaces using first order upwinding
 %%% with advective velocity given at grid cell interfaces - def.(S.7)
+%%% the current scheme messes up the simplest test of advection if we
+%%% enforce the flux at the left boundary. If not, it runs fine until it
+%%% reaches the left boundary for a while. 
 function fluxdiffx1 = MA1(y, vel, par)
     % compute flux accross cell interfaces using first order upwinding
     rightBC = y(end);
@@ -193,7 +217,9 @@ function fluxdiffx1 = MA1(y, vel, par)
     else
         flux(1) = vel(1)*y(1);
     end
-    
+    % this line forces the flux at the left boundary to be 0
+    % flux(1) = 0;
+
     % for flux at the right boundary
     if vel(end)>0
         flux(end) = vel(end)*yavg(end);
@@ -203,6 +229,31 @@ function fluxdiffx1 = MA1(y, vel, par)
 
     % compute flux difference per grid cell - def.(S.7) and (S.4)
     fluxdiffx1 = Mx([0; flux; 0],par);
+    fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
+    fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
+end
+
+
+% Take cells or collagen without ghost points (K cell interfaces)
+function fluxdiffx1 = MA2(y, vel, par)
+    flux = zeros(size(y));
+    % velocity shifted to grid centers
+    c1 = [1; zeros(par.K-2,1)];
+    vel = 0.5*[c1, eye(par.K-1)+diag(ones(par.K-2,1),-1)]*vel;
+
+    % compute flux at the grid cell interfaces
+    for i = 1:size(vel)
+        if vel(i)>0
+            flux(i) = flux(i)-y(i)*vel(i);
+            flux(i+1) = flux(i+1)+y(i)*vel(i);
+        else
+            flux(i) = flux(i)-y(i+1)*vel(i);
+            flux(i+1) = flux(i+1)+y(i+1)*vel(i);
+        end
+    end
+
+    % compute flux difference per grid cell - def.(S.7) and (S.4)
+    fluxdiffx1 = Mx([flux(2); flux; 0], par);
     fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
     fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
 end
@@ -232,7 +283,7 @@ function plot_solution(x,y,yp,t,par,video_on,video_filename)
         subplot(1,4,2)
         plot(x,p)
         title('$\rho(t,x)$')
-        % ylim([0,max(2,max(p))])
+        % ylim([0.8,1.2])
         axis square
         subplot(1,4,3)
         plot(x,u)
@@ -274,6 +325,7 @@ function plot_transport(x,y,t,par,video_on,video_filename)
         subplot(1,3,1)
         plot(x,p)
         title('$p(t,x)$')
+        ylim([0,2])
         axis square
         subplot(1,3,2)
         plot(x,u)
