@@ -84,7 +84,8 @@ function f = mechanochemical(y,yp,par)
     dn = 1;       % cell decay rate
     m = 0;      % collagen production rate
     dp = 0;     % collagen decay rate
-    a1 = 0;       % stress related recruitment rate
+    a1 = -0.1;       % stress related recruitment rate
+    a2 = 0;       % stress gradient related recruitment rate
     
     %%% Reshape input vectors
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
@@ -98,7 +99,7 @@ function f = mechanochemical(y,yp,par)
     %%% Equation for n
     % Advection velocity at grid cell interfaces - eq.(S.6)
     Tr = tau*p.*n;
-    sig = eta*MxfreeRightBC(uptilde, par) + E*MxfreeRightBC(utilde,par) + Tr;
+    sig = eta*Mx(uptilde, par) + E*Mx(utilde,par) + Tr;
     % fn(n,n',p,u') = 0 - eq.(S.5)
     fn = np - D*Mxx(ntilde, par) + MA1(ntilde, up, par) + a1*sig - an*ones(size(n)) + dn*n - r*n.*(1-n);
     % fn = np;
