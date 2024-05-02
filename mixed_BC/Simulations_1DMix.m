@@ -19,9 +19,9 @@ x = linspace(0,par.L,par.K);
 par.x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = par.x(2)-par.x(1);      % Cell size
 t0 = 0;                          % Initial time
-tf = 100;                         % Final time
-tspan = linspace(t0,tf,100);     % Time span
-% dt = tspan(2)-tspan(1);
+tf = 100;                        % Final time
+tspan = linspace(t0,tf,200);     % Time span
+dt = tspan(2)-tspan(1);
 %% Initial conditions - eq.(28)
 steadystate = [ones(2*par.K,1); zeros(par.K,1)];
 f = 1+0.5*exp(-((par.x)./0.2).^2);
@@ -53,11 +53,11 @@ disp(['residuum (from res()) of IC = ' num2str(res(y0,yp0), '%15.10e')]);
 
 %% Solve
 tic
-[t,y] = ode15i(@(t,y,yp)(mechanochemical(y,yp,par)),tspan,y0,yp0);
+% [t,y] = ode15i(@(t,y,yp)(mechanochemical(y,yp,par)),tspan,y0,yp0);
 sol = ode15i(@(t,y,yp)(mechanochemical(y,yp,par)),tspan,y0,yp0);
-% tfinal = sol.stats.tfinal;
-% t = linspace(t0,tfinal,tfinal/dt+1);
-t = t.';
+tfinal = sol.stats.tfinal;
+t = linspace(t0,tfinal,tfinal/dt+1);
+% t = t.';
 [y,yp] = deval(sol,t);
 toc
 %%% Save computed solution to file
@@ -98,7 +98,7 @@ function f = mechanochemical(y,yp,par)
     %%% Equation for n
     % Advection velocity at grid cell interfaces - eq.(S.6)
     Tr = tau*p.*n;
-    sig = eta*Mx(uptilde, par) + E*Mx(utilde,par) + Tr;
+    sig = eta*MxfreeRightBC(uptilde, par) + E*MxfreeRightBC(utilde,par) + Tr;
     % fn(n,n',p,u') = 0 - eq.(S.5)
     fn = np - D*Mxx(ntilde, par) + MA1(ntilde, up, par) + a1*sig - an*ones(size(n)) + dn*n - r*n.*(1-n);
     % fn = np;
@@ -113,10 +113,10 @@ function f = mechanochemical(y,yp,par)
     n0 = 1.25;
     k1 = 1;
     h1 = (n.^k1)./(n0.^k1 + n.^k1);
-    Tr = tau*p.*h1;
+    Tr = tau*p.*n;
     Trtilde = [Tr(2); Tr; tau*ptilde(end)*ntilde(end)];
     % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
-    fu = eta*MxxfreeRrightBC(uptilde, par) + E*MxxfreeRrightBC(utilde,par) + Mx(Trtilde, par) + 0*Trx(Trtilde,par) - s*p.*u;
+    fu = eta*Mxx(uptilde, par) + E*Mxx(utilde,par) + Mx(Trtilde, par) + 0*Trx(Trtilde,par) - s*p.*u;
     % fu = up - 0.1*sin(pi.*par.x+pi/2).';
     % fu = up + 0.1;
 
@@ -147,42 +147,41 @@ function dx2 = Mxx(y,par)
 end
 
 %%% Computing second order derivative for displacement, without enforcing
-%%% BCs
+%%% BC on the right
 function dx2 = MxxfreeRrightBC(y,par)
     persistent Mdxx;     % Mdx is a K x K+2 matrix
     c1 = [1; zeros(par.K-1,1)];
     cn = [zeros(par.K-1,1); 1];
     Mdxx = (1/par.dx/par.dx)*[c1, -2*eye(par.K) + diag(ones(par.K-1,1),1) + diag(ones(par.K-1,1),-1) ,cn];
     dx2 = Mdxx*y;
-    uxx = Mxu([0; Mxu(y,par); 0],par);
-    % dx2(1) = uxx(1);
+    uxx = MxfreeRightBC([0; MxfreeRightBC(y,par); 0],par);
     dx2(end) = uxx(end);
 end
 
-% function dx2 = MxxrightDir(y,par)
+% function dx2 = MxxfreeLeftBC(y,par)
 %     persistent Mdxx;     % Mdx is a K x K+2 matrix
 %     c1 = [1; zeros(par.K-1,1)];
 %     cn = [zeros(par.K-1,1); 1];
 %     Mdxx = (1/par.dx/par.dx)*[c1, -2*eye(par.K) + diag(ones(par.K-1,1),1) + diag(ones(par.K-1,1),-1) ,cn];
 %     dx2 = Mdxx*y;
 %     uxx = Mxu([0; Mxu(y,par); 0],par);
-%     dx2(1) = uxx(1);
 %     dx2(end) = uxx(end);
 % end
 
 function trgrad = Trx(y,par)
     trgrad = Mx(y,par);
     trgrad(1) = (y(2)-y(1))/par.dx;
-    trgrad(end) = (y(end)-y(end-1))/par.dx;
+    % trgrad(end) = (y(end)-y(end-1))/par.dx;
+    trgrad(end) = 0;
 end
 
-function dx1 = Mxu(y,par)
+function dx1 = MxfreeRightBC(y,par)
     persistent Mdx;     % Mdx is a K x K+2 matrix
     c1 = [-1; zeros(par.K-1,1)];
     cn = [zeros(par.K-1,1); 1];
     Mdx = (0.5/par.dx)*[c1, diag(ones(par.K-1,1),1)-diag(ones(par.K-1,1),-1) ,cn];
     dx1 = Mdx*y;
-    dx1(1) = (1/par.dx)*(y(3)-y(2));
+    % dx1(1) = (1/par.dx)*(y(3)-y(2));
     dx1(end) = (1/par.dx)*(y(end-1)-y(end-2));
 end
 
@@ -216,8 +215,6 @@ function fluxdiffx1 = MA1(y, vel, par)
     else
         flux(1) = vel(1)*y(1);
     end
-    % this line forces the flux at the left boundary to be 0
-    % flux(1) = 0;
 
     % for flux at the right boundary
     if vel(end)>0
