@@ -24,12 +24,12 @@ tspan = linspace(t0,tf,200);     % Time span
 dt = tspan(2)-tspan(1);
 %% Initial conditions - eq.(28)
 steadystate = [ones(2*par.K,1); zeros(par.K,1)];
-f = 1+0.5*exp(-((par.x)./0.2).^2);
+f = 1+0*exp(-((par.x)./0.2).^2);
 % f1 = 2 + 10*sin(0.1*pi.*par.x);
 % f2 = 1 + 0.5*par.x;
 % f3 = 2 + 10*cos(0.05*pi.*par.x);
-n0 = (f.*ones(1,par.K)).';      % cells
-% n0 = ones(par.K,1);
+% n0 = (f.*ones(1,par.K)).';      % cells
+n0 = ones(par.K,1);
 % p0 = (f.*ones(1,par.K)).';      % collagen
 p0 = ones(par.K,1);
 u0 = zeros(par.K,1);            % displacement
@@ -79,12 +79,12 @@ function f = mechanochemical(y,yp,par)
     Dp = 1e-3;    % diffusion for collagen
     r = 0;        % proliferation
     s = 5;        % substrate elasticity
-    tau = 0.5;    % cell traction 
+    tau = 0.5*exp(-(30*par.x).^2).';    % cell traction 
     an = 1;       % cell recruitment rate
     dn = 1;       % cell decay rate
-    m = 0.1;      % collagen production rate
-    dp = 0.1;     % collagen decay rate
-    a1 = 0.3;       % stress related recruitment rate
+    m = 1;      % collagen production rate
+    dp = 1;     % collagen decay rate
+    a1 = 0.1;       % stress related recruitment rate
     
     %%% Reshape input vectors
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
@@ -100,13 +100,13 @@ function f = mechanochemical(y,yp,par)
     n0 = 1.1*ones(size(n));
     k1 = 27;
     h1 = (n.^k1)./(n0.^k1 + n.^k1);
-    Tr = tau*p.*h1;
-    Trtilde = [Tr(2); Tr; tau*ptilde(end)*ntilde(end)];
+    Tr = tau.*p.*n;
+    Trtilde = [Tr(2); Tr; tau(end)*ptilde(end)*ntilde(end)];
 
     %%% Equation for n
     % Advection velocity at grid cell interfaces - eq.(S.6)
     sig = eta*Mx(uptilde, par) + E*Mx(utilde,par) + Tr;
-    disp(sig);
+    % disp(sig);
     sig0 = 0.1*ones(size(sig));
     k2 = 5;
     fsig = (sig.^k2)./(sig0.^k2 + sig.^k2);
