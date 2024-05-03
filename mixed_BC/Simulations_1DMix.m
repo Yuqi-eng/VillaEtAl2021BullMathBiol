@@ -76,16 +76,15 @@ function f = mechanochemical(y,yp,par)
     eta = 1;      % viscosity
     E = 1;        % elasticity
     D = 0.01;     % diffusion
-    Dp = 1e-4;    % diffusion for collagen
+    Dp = 1e-3;    % diffusion for collagen
     r = 0;        % proliferation
     s = 5;        % substrate elasticity
     tau = 0.5;    % cell traction 
     an = 1;       % cell recruitment rate
     dn = 1;       % cell decay rate
-    m = 0;      % collagen production rate
-    dp = 0;     % collagen decay rate
-    a1 = -0.1;       % stress related recruitment rate
-    a2 = 0;       % stress gradient related recruitment rate
+    m = 0.1;      % collagen production rate
+    dp = 0.1;     % collagen decay rate
+    a1 = 0.3;       % stress related recruitment rate
     
     %%% Reshape input vectors
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
@@ -95,13 +94,24 @@ function f = mechanochemical(y,yp,par)
     [np,pp,up] = deal(yp(1:par.K),yp(par.K+1:2*par.K),...
          yp(2*par.K+1:3*par.K));
     uptilde = [0; up; 0];
-    
+
+    %%% Traction force term
+    % Tr = tau*p.*n;
+    n0 = 1.1*ones(size(n));
+    k1 = 27;
+    h1 = (n.^k1)./(n0.^k1 + n.^k1);
+    Tr = tau*p.*h1;
+    Trtilde = [Tr(2); Tr; tau*ptilde(end)*ntilde(end)];
+
     %%% Equation for n
     % Advection velocity at grid cell interfaces - eq.(S.6)
-    Tr = tau*p.*n;
     sig = eta*Mx(uptilde, par) + E*Mx(utilde,par) + Tr;
+    disp(sig);
+    sig0 = 0.1*ones(size(sig));
+    k2 = 5;
+    fsig = (sig.^k2)./(sig0.^k2 + sig.^k2);
     % fn(n,n',p,u') = 0 - eq.(S.5)
-    fn = np - D*Mxx(ntilde, par) + MA1(ntilde, up, par) + a1*sig - an*ones(size(n)) + dn*n - r*n.*(1-n);
+    fn = np - D*Mxx(ntilde, par) + MA1(ntilde, up, par) - a1*fsig - an*ones(size(n)) + dn*n - r*n.*(1-n);
     % fn = np;
 
     %%% Equation for p
@@ -111,11 +121,6 @@ function f = mechanochemical(y,yp,par)
 
     %%% Equation for u 
     % Traction term - eq.(S.12)-(S.14)
-    n0 = 1.25;
-    k1 = 1;
-    h1 = (n.^k1)./(n0.^k1 + n.^k1);
-    Tr = tau*p.*n;
-    Trtilde = [Tr(2); Tr; tau*ptilde(end)*ntilde(end)];
     % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
     fu = eta*Mxx(uptilde, par) + E*Mxx(utilde,par) + Mx(Trtilde, par) + 0*Trx(Trtilde,par) - s*p.*u;
     % fu = up - 0.1*sin(pi.*par.x+pi/2).';
