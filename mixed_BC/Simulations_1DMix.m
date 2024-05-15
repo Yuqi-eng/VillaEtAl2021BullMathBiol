@@ -8,6 +8,7 @@ set(0,'defaultaxeslinewidth',1)
 set(0,'defaultpatchlinewidth',1)
 set(0,'defaultlinelinewidth',2)
 set(0,'defaultTextInterpreter','latex')
+
 %% Numerical set up
 par.K = in_K;                    % Number of spatial grid cells
 par.L = 1;                       % Domain length
@@ -20,22 +21,24 @@ par.x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = par.x(2)-par.x(1);      % Cell size
 t0 = 0;                          % Initial time
 tf = 100;                        % Final time
-tspan = linspace(t0,tf,200);     % Time span
+tspan = linspace(t0,tf,100);     % Time span
 dt = tspan(2)-tspan(1);
+
 %% Initial conditions - eq.(28)
 steadystate = [ones(2*par.K,1); zeros(par.K,1)];
-f = 1+0*exp(-((par.x)./0.2).^2);
+f = 1+0.5*exp(-((par.x)./0.2).^2);
 % f1 = 2 + 10*sin(0.1*pi.*par.x);
 % f2 = 1 + 0.5*par.x;
 % f3 = 2 + 10*cos(0.05*pi.*par.x);
-% n0 = (f.*ones(1,par.K)).';      % cells
-n0 = ones(par.K,1);
+n0 = (f.*ones(1,par.K)).';      % cells
+% n0 = ones(par.K,1);
 % p0 = (f.*ones(1,par.K)).';      % collagen
 p0 = ones(par.K,1);
 u0 = zeros(par.K,1);            % displacement
 % u0 = sin(pi.*x+pi/2);
 % u0 = (f2.*ones(1,par.K)).';
 y0 = [n0;p0;u0];
+
 %% Solve with ODE15i
 %%% Compute consistent yp0 
 res = @(y,yp)(norm(mechanochemical(y,yp,par)));
@@ -64,10 +67,12 @@ toc
 filename = ['saved_y1D_' num2str(par.K)];
 % save(filename, 't', 'x', 'y', 'par');
 save(filename, 't', 'y', 'par', 'x', 'yp');
+
 %% Plot
 video_on = true; % Record video: YES (true), NO (false)
 video_filename = [filename '.avi'];
 plot_solution(x,y,yp,t,par,video_on,video_filename);
+
 end
 
 %% Main function implementing the model
@@ -76,15 +81,16 @@ function f = mechanochemical(y,yp,par)
     eta = 1;      % viscosity
     E = 1;        % elasticity
     D = 0.01;     % diffusion
-    Dp = 1e-3;    % diffusion for collagen
+    Dp = 0;       % diffusion for collagen
     r = 0;        % proliferation
-    s = 5;        % substrate elasticity
-    tau = 0.5*exp(-(30*par.x).^2).';    % cell traction 
+    s = 1;        % substrate elasticity
+    tau = 0.5;    % cell traction
+    % tau = 0.5*exp(-(30*par.x).^2).';    % cell traction 
     an = 1;       % cell recruitment rate
     dn = 1;       % cell decay rate
-    m = 1;      % collagen production rate
-    dp = 1;     % collagen decay rate
-    a1 = 0.1;       % stress related recruitment rate
+    m = 0;        % collagen production rate
+    dp = 0;       % collagen decay rate
+    a1 = 0;       % stress related recruitment rate
     
     %%% Reshape input vectors
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
@@ -97,7 +103,7 @@ function f = mechanochemical(y,yp,par)
 
     %%% Traction force term
     % Tr = tau*p.*n;
-    n0 = 1.1*ones(size(n));
+    n0 = 1.05*ones(size(n));
     k1 = 27;
     h1 = (n.^k1)./(n0.^k1 + n.^k1);
     Tr = tau.*p.*n;
@@ -106,7 +112,7 @@ function f = mechanochemical(y,yp,par)
     %%% Equation for n
     % Advection velocity at grid cell interfaces - eq.(S.6)
     sig = eta*Mx(uptilde, par) + E*Mx(utilde,par) + Tr;
-    % disp(sig);
+    % disp(sig.');
     sig0 = 0.1*ones(size(sig));
     k2 = 5;
     fsig = (sig.^k2)./(sig0.^k2 + sig.^k2);
@@ -207,6 +213,8 @@ function fluxdiffx1 = MA1(y, vel, par)
     % get K-1 grid cell centers
     c1 = [1; zeros(par.K-2,1)];
     yavg = 0.5*[c1, eye(par.K-1)+diag(ones(par.K-2,1),-1)]*y;
+
+    % interate over all but boundary cell interfaces
     for i = 2:size(flux)-1
         if (vel(i)>0)
             flux(i) = vel(i)*yavg(i-1);
@@ -230,35 +238,43 @@ function fluxdiffx1 = MA1(y, vel, par)
     end
 
     % compute flux difference per grid cell - def.(S.7) and (S.4)
-    fluxdiffx1 = Mx([0; flux; 0],par);
-    fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
-    fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
-end
+    % fluxdiffx1 = Mx([0; flux; 0],par);
+    % fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
+    % fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
+    
+    % compute flux difference per grid cell via first order FD, assuming
+    % flux gradient at the right boundary is 0
+    fluxdiffx1 = [(1/par.dx)*(flux(2:end)-flux(1:(end-1))); 0];
 
+    % compute flux difference per grid cell via first order FD, assuming
+    % flux gradient at the right boundary is the same as to its left 
+    % fluxdiffx1 = (1/par.dx)*(flux(2:end)-flux(1:(end-1)));
+    % fluxdiffx1 = [fluxdiffx1; fluxdiffx1(end)];
+end
 
 % Take cells or collagen without ghost points (K cell interfaces)
-function fluxdiffx1 = MA2(y, vel, par)
-    flux = zeros(size(y));
-    % velocity shifted to grid centers
-    c1 = [1; zeros(par.K-2,1)];
-    vel = 0.5*[c1, eye(par.K-1)+diag(ones(par.K-2,1),-1)]*vel;
-
-    % compute flux at the grid cell interfaces
-    for i = 1:size(vel)
-        if vel(i)>0
-            flux(i) = flux(i)-y(i)*vel(i);
-            flux(i+1) = flux(i+1)+y(i)*vel(i);
-        else
-            flux(i) = flux(i)-y(i+1)*vel(i);
-            flux(i+1) = flux(i+1)+y(i+1)*vel(i);
-        end
-    end
-
-    % compute flux difference per grid cell - def.(S.7) and (S.4)
-    fluxdiffx1 = Mx([flux(2); flux; 0], par);
-    fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
-    fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
-end
+% function fluxdiffx1 = MA2(y, vel, par)
+%     flux = zeros(size(y));
+%     % velocity shifted to grid centers
+%     c1 = [1; zeros(par.K-2,1)];
+%     vel = 0.5*[c1, eye(par.K-1)+diag(ones(par.K-2,1),-1)]*vel;
+% 
+%     % compute flux at the grid cell interfaces
+%     for i = 1:size(vel)
+%         if vel(i)>0
+%             flux(i) = flux(i)-y(i)*vel(i);
+%             flux(i+1) = flux(i+1)+y(i)*vel(i);
+%         else
+%             flux(i) = flux(i)-y(i+1)*vel(i);
+%             flux(i+1) = flux(i+1)+y(i+1)*vel(i);
+%         end
+%     end
+% 
+%     % compute flux difference per grid cell - def.(S.7) and (S.4)
+%     fluxdiffx1 = Mx([flux(2); flux; 0], par);
+%     fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
+%     fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
+% end
 
 %%% Plot solution 
 function plot_solution(x,y,yp,t,par,video_on,video_filename)
@@ -280,12 +296,12 @@ function plot_solution(x,y,yp,t,par,video_on,video_filename)
         subplot(1,4,1)
         plot(x,n)
         title('$n(t,x)$')
-        % ylim([0,max(2,max(n))])
+        % ylim([0.8,max(1.2,max(n))])
         axis square
         subplot(1,4,2)
         plot(x,p)
         title('$\rho(t,x)$')
-        % ylim([0.8,1.2])
+        % ylim([0.8,max(1.2,max(p))])
         axis square
         subplot(1,4,3)
         plot(x,u)
@@ -294,48 +310,6 @@ function plot_solution(x,y,yp,t,par,video_on,video_filename)
         subplot(1,4,4)
         plot(x,v)
         title('$v(t,x)$')
-        axis square
-        a = axes;
-        t1 = title([' (t=',num2str(t(i)),')']);
-        a.Visible = 'off'; 
-        t1.Visible = 'on'; 
-        drawnow
-        if video_on % Record video
-            frame = getframe(gcf);
-            size(frame.cdata);
-            writeVideo(vid,frame);
-            pause(0.1)
-        end
-    end
-    if video_on % Close video
-        close(vid)
-    end
-end
-
-%%% Plot transport rho, u, v
-function plot_transport(x,y,t,par,video_on,video_filename)
-    if video_on % Initialise video
-        vid = VideoWriter(video_filename);
-        open(vid);
-        figure('Units','normalized','Position',[0 0 0.5 0.45])
-    end
-    for i=1:length(t)
-        clf
-        p = [y(i,par.K+1:2*par.K)];
-        u = [y(i,2*par.K+1:3*par.K)];
-        v = 0.1*sin(pi.*par.x+pi/2);
-        subplot(1,3,1)
-        plot(x,p)
-        title('$p(t,x)$')
-        ylim([0,2])
-        axis square
-        subplot(1,3,2)
-        plot(x,u)
-        title('$u(t,x)$')
-        axis square
-        subplot(1,3,3)
-        plot(x,v)
-        title('$v(x)$')
         axis square
         a = axes;
         t1 = title([' (t=',num2str(t(i)),')']);
