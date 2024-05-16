@@ -23,17 +23,18 @@ sol = bvp4c(@bvpfcn, @bcfcn, solinit, options);
 n = sol.y(1,:);
 p = sol.y(3,:);
 u = sol.y(5,:);
-plot(sol.x,[n;p;u]);
+% plot(sol.x,[n;p;u]);
+figure('Units','normalized','Position',[0 0 0.5 0.45])
 subplot(1,3,1)
-plot(x,n)
+plot(sol.x,n)
 title('$n(t,x)$')
 axis square
 subplot(1,3,2)
-plot(x,p)
+plot(sol.x,p)
 title('$\rho(t,x)$')
 axis square
 subplot(1,3,3)
-plot(x,u)
+plot(sol.x,u)
 title('$u(t,x)$')
 axis square
 pic_name = ['BVP_res' '.png'];
@@ -48,10 +49,11 @@ function f = bvpfcn(x,y)
     an = 1;
     tau = 0.5;
     s = 1;
+    a1 = 0.1;
 
     % y(1) = n, y(2) = n_x, y(3) = rho, y(4) = rho_x, y(5) = u, y(6) = u_x
     f = [y(2)
-        (1/D)*(dn*y(1)-an)
+        (1/D)*(dn*y(1)-an-a1*E*y(6)-a1*tau*y(3)*y(1))
         y(4)
         0
         y(6)
