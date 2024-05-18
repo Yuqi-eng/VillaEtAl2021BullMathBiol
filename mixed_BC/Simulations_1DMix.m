@@ -20,7 +20,7 @@ x = linspace(0,par.L,par.K);
 par.x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = par.x(2)-par.x(1);      % Cell size
 t0 = 0;                          % Initial time
-tf = 1000;                        % Final time
+tf = 200;                        % Final time
 tspan = linspace(t0,tf,100);     % Time span
 dt = tspan(2)-tspan(1);
 
@@ -68,9 +68,9 @@ filename = ['saved_y1D_' num2str(par.K)];
 save(filename, 't', 'y', 'par', 'x', 'yp');
 
 %% Plot
-% video_on = true; % Record video: YES (true), NO (false)
-% video_filename = [filename '.avi'];
-% plot_solution(x,y,yp,t,par,video_on,video_filename);
+video_on = true; % Record video: YES (true), NO (false)
+video_filename = [filename '.avi'];
+plot_solution(x,y,yp,t,par,video_on,video_filename);
 pic_name = ['res' '.png'];
 plot_res(x,y,yp,par,tf,pic_name);
 
@@ -89,8 +89,8 @@ function f = mechanochemical(y,yp,par)
     % tau = 0.5*exp(-(30*par.x).^2).';    % cell traction 
     an = 1;       % cell recruitment rate
     dn = 1;       % cell decay rate
-    m = 0;        % collagen production rate
-    dp = 0;       % collagen decay rate
+    m = 0.1;        % collagen production rate
+    dp = 0.1;       % collagen decay rate
     a1 = 0.1;       % stress related recruitment rate
     
     %%% Reshape input vectors
@@ -105,8 +105,8 @@ function f = mechanochemical(y,yp,par)
     %%% Traction force term
     % Tr = tau*p.*n;
     n0 = 1.1*ones(size(n));
-    k1 = 27;
-    h1 = (n.^k1)./(n0.^k1 + n.^k1);
+    k2 = 27;
+    h1 = (n.^k2)./(n0.^k2 + n.^k2);
     Tr = tau.*p.*n;
     Trtilde = [Tr(2); Tr; tau(end)*ptilde(end)*ntilde(end)];
 
@@ -115,10 +115,10 @@ function f = mechanochemical(y,yp,par)
     sig = eta*Mx(uptilde, par) + E*Mx(utilde,par) + Tr;
     % disp(sig.');
     sig0 = 0.1*ones(size(sig));
-    k2 = 5;
-    fsig = (sig.^k2)./(sig0.^k2 + sig.^k2);
+    k1 = 5;
+    fsig = (sig.^k1)./(sig0.^k1 + sig.^k1);
     % fn(n,n',p,u') = 0 - eq.(S.5)
-    fn = np - D*Mxx(ntilde, par) + 0*MA1(ntilde, up, par) + MA2(n,up,par) - a1*sig - an*ones(size(n)) + dn*n - r*n.*(1-n);
+    fn = np - D*Mxx(ntilde, par) + 0*MA1(ntilde, up, par) + MA2(n,up,par) - a1*fsig - an*ones(size(n)) + dn*n - r*n.*(1-n);
     % fn = np;
 
     %%% Equation for p
@@ -370,8 +370,8 @@ function plot_res(x,y,yp,par,tf,pic_name)
     p = [y(par.K+1:2*par.K,end)];
     u = [y(2*par.K+1:3*par.K,end)];
     v = [yp(2*par.K+1:3*par.K,end)];
-    res_file = 'res';
-    save(res_file,"n","p","u");
+    % res_file = 'res';
+    % save(res_file,"n","p","u");
     subplot(1,4,1)
     plot(x,n)
     title('$n(t,x)$')
