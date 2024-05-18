@@ -44,28 +44,33 @@ saveas(gcf,pic_name);
 function f = bvpfcn(x,y)
     %%% prameter definitions
     E = 1;
+    s = 1;
     D = 0.01;
     Dp = 1e-3;
-    dn = 1;
-    an = 1;
+    dn = 0.5;
+    an = 0.5;
     m = 0.1;
     dp = 0.1;
     tau = 0.5;
-    s = 1;
-    a1 = 0.1;
+    a1 = 0.5;
+    
+    %%% hill function traction force term
+    n0 = 1.1;
+    k2 = 27;
+    h1 = (y(1)^k2)/(n0^k2 + y(1)^k2);
 
-    sig = E*y(6)+tau*y(3)*y(1);
-    sig0 = 0.1;
+    sig0 = 0.2;
     k1 = 5;
-    fsig = (sig^k1)/(sig0^k1 + sig^k1);
+    fsig = (y(6)^k1)/(sig0^k1 + y(6)^k1);
 
-    % y(1) = n, y(2) = n_x, y(3) = rho, y(4) = rho_x, y(5) = u, y(6) = u_x
+    % y(1) = n, y(2) = n_x, y(3) = rho, y(4) = rho_x, y(5) = u, y(6) =
+    % sigma
     f = [y(2)
         (1/D)*(dn*y(1)-an-a1*fsig)
         y(4)
         (1/Dp)*(dp*y(3)-m*y(1))
-        y(6)
-        (s/E)*y(3)*y(5)-(tau/E)*(y(4)*y(1)+y(3)*y(2))];
+        (1/E)*(y(6)-tau*y(3)*h1)
+        s*y(3)*y(5)];
 end
 
 %% Helper functions
@@ -79,11 +84,13 @@ res = [yb(1)-1
        yb(5)];
 end
 
+%%% guess for the high SS: n = 1.5, rho = 1.5, u = 0, sig = 0.3
+%%% guess for the low SS: n = 1, rho = 1, u = 0, sig = 0
 function g = guess(x)
-g = [1
+g = [1.5
      0
-     1
+     1.5
      0
      0
-     0];
+     0.3];
 end

@@ -20,7 +20,7 @@ x = linspace(0,par.L,par.K);
 par.x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = par.x(2)-par.x(1);      % Cell size
 t0 = 0;                          % Initial time
-tf = 200;                        % Final time
+tf = 2000;                        % Final time
 tspan = linspace(t0,tf,100);     % Time span
 dt = tspan(2)-tspan(1);
 
@@ -68,9 +68,9 @@ filename = ['saved_y1D_' num2str(par.K)];
 save(filename, 't', 'y', 'par', 'x', 'yp');
 
 %% Plot
-video_on = true; % Record video: YES (true), NO (false)
-video_filename = [filename '.avi'];
-plot_solution(x,y,yp,t,par,video_on,video_filename);
+% video_on = true; % Record video: YES (true), NO (false)
+% video_filename = [filename '.avi'];
+% plot_solution(x,y,yp,t,par,video_on,video_filename);
 pic_name = ['res' '.png'];
 plot_res(x,y,yp,par,tf,pic_name);
 
@@ -81,17 +81,15 @@ function f = mechanochemical(y,yp,par)
     %%% Parameter values
     eta = 1;      % viscosity
     E = 1;        % elasticity
+    s = 1;        % substrate elasticity
     D = 0.01;     % diffusion
     Dp = 1e-3;       % diffusion for collagen
-    r = 0;        % proliferation
-    s = 1;        % substrate elasticity
-    tau = 0.5;    % cell traction
-    % tau = 0.5*exp(-(30*par.x).^2).';    % cell traction 
-    an = 1;       % cell recruitment rate
-    dn = 1;       % cell decay rate
+    an = 0.5;       % cell recruitment rate
+    dn = 0.5;       % cell decay rate
     m = 0.1;        % collagen production rate
     dp = 0.1;       % collagen decay rate
-    a1 = 0.1;       % stress related recruitment rate
+    tau = 0.5;    % cell traction
+    a1 = 0.5;       % stress related recruitment rate
     
     %%% Reshape input vectors
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
@@ -104,21 +102,24 @@ function f = mechanochemical(y,yp,par)
 
     %%% Traction force term
     % Tr = tau*p.*n;
-    n0 = 1.1*ones(size(n));
+    n0 = 1.1;
     k2 = 27;
-    h1 = (n.^k2)./(n0.^k2 + n.^k2);
-    Tr = tau.*p.*n;
-    Trtilde = [Tr(2); Tr; tau(end)*ptilde(end)*ntilde(end)];
+    h1 = (n.^k2)./(n0^k2*ones(size(n)) + n.^k2);
+    Tr = tau.*p.*h1;
+    % Trtilde = [Tr(2); Tr; tau*ptilde(end)*ntilde(end)];
+    % for when traction force term has a hill function
+    n2 = (ntilde(end)^k2)/(n0^k2 + ntilde(end)^k2);
+    Trtilde = [Tr(2); Tr; tau*ptilde(end)*n2];
 
     %%% Equation for n
     % Advection velocity at grid cell interfaces - eq.(S.6)
     sig = eta*Mx(uptilde, par) + E*Mx(utilde,par) + Tr;
     % disp(sig.');
-    sig0 = 0.1*ones(size(sig));
+    sig0 = 0.2*ones(size(sig));
     k1 = 5;
     fsig = (sig.^k1)./(sig0.^k1 + sig.^k1);
     % fn(n,n',p,u') = 0 - eq.(S.5)
-    fn = np - D*Mxx(ntilde, par) + 0*MA1(ntilde, up, par) + MA2(n,up,par) - a1*fsig - an*ones(size(n)) + dn*n - r*n.*(1-n);
+    fn = np - D*Mxx(ntilde, par) + 0*MA1(ntilde, up, par) + MA2(n,up,par) - a1*fsig - an*ones(size(n)) + dn*n;
     % fn = np;
 
     %%% Equation for p
@@ -129,7 +130,7 @@ function f = mechanochemical(y,yp,par)
     %%% Equation for u 
     % Traction term - eq.(S.12)-(S.14)
     % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
-    fu = eta*Mxx(uptilde, par) + E*Mxx(utilde,par) + Mx(Trtilde, par) + 0*Trx(Trtilde,par) - s*p.*u;
+    fu = eta*Mxx(uptilde, par) + E*Mxx(utilde,par) + Mx(Trtilde, par) - s*p.*u;
     % fu = up - 0.1*sin(pi.*par.x+pi/2).';
     % fu = up + 0.1;
 
@@ -180,13 +181,6 @@ end
 %     uxx = Mxu([0; Mxu(y,par); 0],par);
 %     dx2(end) = uxx(end);
 % end
-
-function trgrad = Trx(y,par)
-    trgrad = Mx(y,par);
-    trgrad(1) = (y(2)-y(1))/par.dx;
-    % trgrad(end) = (y(end)-y(end-1))/par.dx;
-    trgrad(end) = 0;
-end
 
 function dx1 = MxfreeRightBC(y,par)
     persistent Mdx;     % Mdx is a K x K+2 matrix
@@ -239,13 +233,14 @@ function fluxdiffx1 = MA1(y, vel, par)
     end
 
     % compute flux difference per grid cell - def.(S.7) and (S.4)
-    % fluxdiffx1 = Mx([0; flux; 0],par);
-    % fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
-    % fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
+    fluxdiffx1 = Mx([0; flux; 0],par);
+    fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
+    fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
+    % fluxdiffx1(end) = 0;
     
     % compute flux difference per grid cell via first order FD, assuming
     % flux gradient at the right boundary is 0
-    fluxdiffx1 = [(1/par.dx)*(flux(2:end)-flux(1:(end-1))); 0];
+    % fluxdiffx1 = [(1/par.dx)*(flux(2:end)-flux(1:(end-1))); 0];
 
     % compute flux difference per grid cell via first order FD, assuming
     % flux gradient at the right boundary is the same as to its left 
@@ -272,13 +267,13 @@ function fluxdiffx1 = MA2(y, vel, par)
     flux(1) = vel(1)*y(1);
 
     % compute flux difference per grid cell - def.(S.7) and (S.4)
-    fluxdiffx1 = Mx([0; flux; 0],par);
-    fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
-    fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
+    % fluxdiffx1 = Mx([0; flux; 0],par);
+    % fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
+    % fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
     
     % compute flux difference per grid cell via first order FD, assuming
     % flux gradient at the right boundary is 0
-    % fluxdiffx1 = [(1/par.dx)*(flux(2:end)-flux(1:(end-1))); 0];
+    fluxdiffx1 = [(1/par.dx)*(flux(2:end)-flux(1:(end-1))); 0];
 
     % compute flux difference per grid cell via first order FD, assuming
     % flux gradient at the right boundary is the same as to its left 
