@@ -55,11 +55,11 @@ function f = bvpfcn(x,y)
     a1 = 0.5;
     
     %%% hill function traction force term
-    n0 = 1.1;
-    k2 = 27;
+    n0 = 1.45;
+    k2 = 5;
     h1 = (y(1)^k2)/(n0^k2 + y(1)^k2);
 
-    sig0 = 0.2;
+    sig0 = 0.18;
     k1 = 5;
     fsig = (y(6)^k1)/(sig0^k1 + y(6)^k1);
 
@@ -84,13 +84,21 @@ res = [yb(1)-1
        yb(5)];
 end
 
-%%% guess for the high SS: n = 1.5, rho = 1.5, u = 0, sig = 0.3
-%%% guess for the low SS: n = 1, rho = 1, u = 0, sig = 0
 function g = guess(x)
-g = [1.5
-     0
-     1.5
-     0
-     0
-     0.3];
+g = [1
+    0
+    0
+    0
+    0
+    0
+    ];
 end
+
+% function g = guess(x)
+% g = [1.5
+%      0
+%      1.5
+%      0
+%      0
+%      0.3];
+% end

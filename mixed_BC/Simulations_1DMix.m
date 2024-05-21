@@ -26,7 +26,7 @@ dt = tspan(2)-tspan(1);
 
 %% Initial conditions - eq.(28)
 steadystate = [ones(2*par.K,1); zeros(par.K,1)];
-f = 1+0.5*exp(-((par.x)./0.2).^2);
+f = 1+1*exp(-((par.x)./0.2).^2);
 % f1 = 2 + 10*sin(0.1*pi.*par.x);
 % f2 = 1 + 0.5*par.x;
 % f3 = 2 + 10*cos(0.05*pi.*par.x);
@@ -102,8 +102,8 @@ function f = mechanochemical(y,yp,par)
 
     %%% Traction force term
     % Tr = tau*p.*n;
-    n0 = 1.1;
-    k2 = 27;
+    n0 = 1.45;
+    k2 = 5;
     h1 = (n.^k2)./(n0^k2*ones(size(n)) + n.^k2);
     Tr = tau.*p.*h1;
     % Trtilde = [Tr(2); Tr; tau*ptilde(end)*ntilde(end)];
@@ -114,8 +114,8 @@ function f = mechanochemical(y,yp,par)
     %%% Equation for n
     % Advection velocity at grid cell interfaces - eq.(S.6)
     sig = eta*Mx(uptilde, par) + E*Mx(utilde,par) + Tr;
-    % disp(sig.');
-    sig0 = 0.2*ones(size(sig));
+    disp(sig.');
+    sig0 = 0.18*ones(size(sig));
     k1 = 5;
     fsig = (sig.^k1)./(sig0.^k1 + sig.^k1);
     % fn(n,n',p,u') = 0 - eq.(S.5)
@@ -158,38 +158,6 @@ function dx2 = Mxx(y,par)
     cn = [zeros(par.K-1,1); 1];
     Mdxx = (1/par.dx/par.dx)*[c1, -2*eye(par.K) + diag(ones(par.K-1,1),1) + diag(ones(par.K-1,1),-1) ,cn];
     dx2 = Mdxx*y;
-end
-
-%%% Computing second order derivative for displacement, without enforcing
-%%% BC on the right
-function dx2 = MxxfreeRrightBC(y,par)
-    persistent Mdxx;     % Mdx is a K x K+2 matrix
-    c1 = [1; zeros(par.K-1,1)];
-    cn = [zeros(par.K-1,1); 1];
-    Mdxx = (1/par.dx/par.dx)*[c1, -2*eye(par.K) + diag(ones(par.K-1,1),1) + diag(ones(par.K-1,1),-1) ,cn];
-    dx2 = Mdxx*y;
-    uxx = MxfreeRightBC([0; MxfreeRightBC(y,par); 0],par);
-    dx2(end) = uxx(end);
-end
-
-% function dx2 = MxxfreeLeftBC(y,par)
-%     persistent Mdxx;     % Mdx is a K x K+2 matrix
-%     c1 = [1; zeros(par.K-1,1)];
-%     cn = [zeros(par.K-1,1); 1];
-%     Mdxx = (1/par.dx/par.dx)*[c1, -2*eye(par.K) + diag(ones(par.K-1,1),1) + diag(ones(par.K-1,1),-1) ,cn];
-%     dx2 = Mdxx*y;
-%     uxx = Mxu([0; Mxu(y,par); 0],par);
-%     dx2(end) = uxx(end);
-% end
-
-function dx1 = MxfreeRightBC(y,par)
-    persistent Mdx;     % Mdx is a K x K+2 matrix
-    c1 = [-1; zeros(par.K-1,1)];
-    cn = [zeros(par.K-1,1); 1];
-    Mdx = (0.5/par.dx)*[c1, diag(ones(par.K-1,1),1)-diag(ones(par.K-1,1),-1) ,cn];
-    dx1 = Mdx*y;
-    % dx1(1) = (1/par.dx)*(y(3)-y(2));
-    dx1(end) = (1/par.dx)*(y(end-1)-y(end-2));
 end
 
 %%% Compute advection at grid cell interfaces using first order upwinding
@@ -236,7 +204,6 @@ function fluxdiffx1 = MA1(y, vel, par)
     fluxdiffx1 = Mx([0; flux; 0],par);
     fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
     fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
-    % fluxdiffx1(end) = 0;
     
     % compute flux difference per grid cell via first order FD, assuming
     % flux gradient at the right boundary is 0
@@ -267,43 +234,20 @@ function fluxdiffx1 = MA2(y, vel, par)
     flux(1) = vel(1)*y(1);
 
     % compute flux difference per grid cell - def.(S.7) and (S.4)
-    % fluxdiffx1 = Mx([0; flux; 0],par);
-    % fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
-    % fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
+    fluxdiffx1 = Mx([0; flux; 0],par);
+    fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
+    fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
+    % fluxdiffx1(end) = 0;
     
     % compute flux difference per grid cell via first order FD, assuming
     % flux gradient at the right boundary is 0
-    fluxdiffx1 = [(1/par.dx)*(flux(2:end)-flux(1:(end-1))); 0];
+    % fluxdiffx1 = [(1/par.dx)*(flux(2:end)-flux(1:(end-1))); 0];
 
     % compute flux difference per grid cell via first order FD, assuming
     % flux gradient at the right boundary is the same as to its left 
     % fluxdiffx1 = (1/par.dx)*(flux(2:end)-flux(1:(end-1)));
     % fluxdiffx1 = [fluxdiffx1; fluxdiffx1(end)];
 end
-
-% Take cells or collagen without ghost points (K cell interfaces)
-% function fluxdiffx1 = MA2(y, vel, par)
-%     flux = zeros(size(y));
-%     % velocity shifted to grid centers
-%     c1 = [1; zeros(par.K-2,1)];
-%     vel = 0.5*[c1, eye(par.K-1)+diag(ones(par.K-2,1),-1)]*vel;
-% 
-%     % compute flux at the grid cell interfaces
-%     for i = 1:size(vel)
-%         if vel(i)>0
-%             flux(i) = flux(i)-y(i)*vel(i);
-%             flux(i+1) = flux(i+1)+y(i)*vel(i);
-%         else
-%             flux(i) = flux(i)-y(i+1)*vel(i);
-%             flux(i+1) = flux(i+1)+y(i+1)*vel(i);
-%         end
-%     end
-% 
-%     % compute flux difference per grid cell - def.(S.7) and (S.4)
-%     fluxdiffx1 = Mx([flux(2); flux; 0], par);
-%     fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
-%     fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
-% end
 
 %%% Plot solution 
 function plot_solution(x,y,yp,t,par,video_on,video_filename)
