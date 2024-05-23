@@ -42,24 +42,23 @@ saveas(gcf,pic_name);
 
 %% Main function implementing the model
 function f = bvpfcn(x,y)
-    %%% prameter definitions
-    E = 1;
-    s = 1;
-    D = 0.01;
-    Dp = 1e-3;
-    dn = 0.5;
-    an = 0.5;
-    m = 0.1;
-    dp = 0.1;
-    tau = 0.5;
-    a1 = 0.5;
+    %%% Parameter values
+    E = 1;        % elasticity
+    D = 0.05;     % diffusion
+    Dp = 1e-3;       % diffusion for collagen
+    an = 0.5;       % cell recruitment rate
+    dn = 0.5;       % cell decay rate
+    m = 0.1;        % collagen production rate
+    dp = 0.1;       % collagen decay rate
+    tau = 0.5;    % cell traction
+    a1 = 0.7;       % stress related recruitment rate
     
     %%% hill function traction force term
     n0 = 1.45;
     k2 = 5;
     h1 = (y(1)^k2)/(n0^k2 + y(1)^k2);
 
-    sig0 = 0.18;
+    sig0 = 0.2;
     k1 = 5;
     fsig = (y(6)^k1)/(sig0^k1 + y(6)^k1);
 
@@ -70,7 +69,7 @@ function f = bvpfcn(x,y)
         y(4)
         (1/Dp)*(dp*y(3)-m*y(1))
         (1/E)*(y(6)-tau*y(3)*h1)
-        s*y(3)*y(5)];
+        0];
 end
 
 %% Helper functions
@@ -84,21 +83,20 @@ res = [yb(1)-1
        yb(5)];
 end
 
-function g = guess(x)
-g = [1
-    0
-    0
-    0
-    0
-    0
-    ];
-end
-
 % function g = guess(x)
-% g = [1.5
-%      0
-%      1.5
-%      0
-%      0
-%      0.3];
+% g = [1
+%     0
+%     0
+%     0
+%     0
+%     0];
 % end
+
+function g = guess(x)
+g = [1.5
+     0
+     1.5
+     0
+     0
+     0.3];
+end

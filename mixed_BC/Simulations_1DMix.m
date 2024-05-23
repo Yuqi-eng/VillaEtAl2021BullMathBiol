@@ -20,13 +20,13 @@ x = linspace(0,par.L,par.K);
 par.x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = par.x(2)-par.x(1);      % Cell size
 t0 = 0;                          % Initial time
-tf = 2000;                        % Final time
+tf = 1000;                        % Final time
 tspan = linspace(t0,tf,100);     % Time span
 dt = tspan(2)-tspan(1);
 
 %% Initial conditions - eq.(28)
 steadystate = [ones(2*par.K,1); zeros(par.K,1)];
-f = 1+1*exp(-((par.x)./0.2).^2);
+f = 1+2*exp(-((par.x)./0.2).^2);
 % f1 = 2 + 10*sin(0.1*pi.*par.x);
 % f2 = 1 + 0.5*par.x;
 % f3 = 2 + 10*cos(0.05*pi.*par.x);
@@ -60,7 +60,6 @@ tic
 sol = ode15i(@(t,y,yp)(mechanochemical(y,yp,par)),tspan,y0,yp0);
 tfinal = sol.stats.tfinal;
 t = linspace(t0,tfinal,tfinal/dt+1);
-% t = t.';
 [y,yp] = deval(sol,t);
 toc
 %%% Save computed solution to file
@@ -81,15 +80,14 @@ function f = mechanochemical(y,yp,par)
     %%% Parameter values
     eta = 1;      % viscosity
     E = 1;        % elasticity
-    s = 1;        % substrate elasticity
-    D = 0.01;     % diffusion
+    D = 0.05;     % diffusion
     Dp = 1e-3;       % diffusion for collagen
     an = 0.5;       % cell recruitment rate
     dn = 0.5;       % cell decay rate
     m = 0.1;        % collagen production rate
     dp = 0.1;       % collagen decay rate
     tau = 0.5;    % cell traction
-    a1 = 0.5;       % stress related recruitment rate
+    a1 = 0.7;       % stress related recruitment rate
     
     %%% Reshape input vectors
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
@@ -102,37 +100,29 @@ function f = mechanochemical(y,yp,par)
 
     %%% Traction force term
     % Tr = tau*p.*n;
+    % Trtilde = [Tr(2); Tr; tau*ptilde(end)*ntilde(end)];
+    % for when traction force term has a hill function
     n0 = 1.45;
     k2 = 5;
     h1 = (n.^k2)./(n0^k2*ones(size(n)) + n.^k2);
     Tr = tau.*p.*h1;
-    % Trtilde = [Tr(2); Tr; tau*ptilde(end)*ntilde(end)];
-    % for when traction force term has a hill function
     n2 = (ntilde(end)^k2)/(n0^k2 + ntilde(end)^k2);
     Trtilde = [Tr(2); Tr; tau*ptilde(end)*n2];
 
     %%% Equation for n
-    % Advection velocity at grid cell interfaces - eq.(S.6)
     sig = eta*Mx(uptilde, par) + E*Mx(utilde,par) + Tr;
-    disp(sig.');
-    sig0 = 0.18*ones(size(sig));
+    disp(sig(1));
+    sig0 = 0.2*ones(size(sig));
     k1 = 5;
     fsig = (sig.^k1)./(sig0.^k1 + sig.^k1);
-    % fn(n,n',p,u') = 0 - eq.(S.5)
-    fn = np - D*Mxx(ntilde, par) + 0*MA1(ntilde, up, par) + MA2(n,up,par) - a1*fsig - an*ones(size(n)) + dn*n;
-    % fn = np;
+    % disp(fsig.');
+    fn = np - D*Mxx(ntilde, par) + MA(n,up,par) - a1*fsig - an*ones(size(n)) + dn*n;
 
     %%% Equation for p
-    % fp(p,p',u') = 0 - eq.(S.10)
-    fp = pp - Dp*Mxx(ptilde,par) + 0*MA1(ptilde, up, par) + MA2(p,up,par) - m*n + dp*p;
-    % fp = pp;
+    fp = pp - Dp*Mxx(ptilde,par) + MA(p,up,par) - m*n + dp*p;
 
     %%% Equation for u 
-    % Traction term - eq.(S.12)-(S.14)
-    % fu(n,n',p,p',u,u') = 0 - eq.(S.11)
-    fu = eta*Mxx(uptilde, par) + E*Mxx(utilde,par) + Mx(Trtilde, par) - s*p.*u;
-    % fu = up - 0.1*sin(pi.*par.x+pi/2).';
-    % fu = up + 0.1;
+    fu = eta*Mxx(uptilde, par) + E*Mxx(utilde,par) + Mx(Trtilde, par);
 
     %%% Full system - eq.(S.1)
     f = [fn; fp; fu];
@@ -160,65 +150,10 @@ function dx2 = Mxx(y,par)
     dx2 = Mdxx*y;
 end
 
-%%% Compute advection at grid cell interfaces using first order upwinding
-%%% with advective velocity given at grid cell interfaces - def.(S.7)
-%%% the current scheme messes up the simplest test of advection if we
-%%% enforce the flux at the left boundary. If not, it runs fine until it
-%%% reaches the left boundary for a while. 
-function fluxdiffx1 = MA1(y, vel, par)
-    % compute flux accross cell interfaces using first order upwinding
-    rightBC = y(end);
-    y = y(2:end-1);
-    % flux at K grid interfaces
-    flux = NaN(size(vel));
-
-    % take the cell center values for material, using the K by K-1 matrix
-    % get K-1 grid cell centers
-    c1 = [1; zeros(par.K-2,1)];
-    yavg = 0.5*[c1, eye(par.K-1)+diag(ones(par.K-2,1),-1)]*y;
-
-    % interate over all but boundary cell interfaces
-    for i = 2:size(flux)-1
-        if (vel(i)>0)
-            flux(i) = vel(i)*yavg(i-1);
-        else 
-            flux(i) = vel(i)*yavg(i);
-        end
-    end
-
-    % for flux at the left Neumann boundary
-    if vel(1)<0
-        flux(1) = vel(1)*yavg(1);
-    else
-        flux(1) = vel(1)*y(1);
-    end
-
-    % for flux at the right boundary
-    if vel(end)>0
-        flux(end) = vel(end)*yavg(end);
-    else
-        flux(end) = vel(end)*rightBC;
-    end
-
-    % compute flux difference per grid cell - def.(S.7) and (S.4)
-    fluxdiffx1 = Mx([0; flux; 0],par);
-    fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
-    fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
-    
-    % compute flux difference per grid cell via first order FD, assuming
-    % flux gradient at the right boundary is 0
-    % fluxdiffx1 = [(1/par.dx)*(flux(2:end)-flux(1:(end-1))); 0];
-
-    % compute flux difference per grid cell via first order FD, assuming
-    % flux gradient at the right boundary is the same as to its left 
-    % fluxdiffx1 = (1/par.dx)*(flux(2:end)-flux(1:(end-1)));
-    % fluxdiffx1 = [fluxdiffx1; fluxdiffx1(end)];
-end
-
 %%% Compute flux gradient using first order upwinding without center
 %%% averaging
 %%% Take material at K grid cells
-function fluxdiffx1 = MA2(y, vel, par)
+function fluxdiffx1 = MA(y, vel, par)
     flux = zeros(size(y));
 
     for i=2:size(flux)
@@ -230,15 +165,16 @@ function fluxdiffx1 = MA2(y, vel, par)
     end
 
     % flux(1) = 0;
-
     flux(1) = vel(1)*y(1);
 
     % compute flux difference per grid cell - def.(S.7) and (S.4)
     fluxdiffx1 = Mx([0; flux; 0],par);
     fluxdiffx1(1) = (flux(2)-flux(1))/par.dx;
     fluxdiffx1(end) = (flux(end)-flux(end-1))/par.dx;
-    % fluxdiffx1(end) = 0;
-    
+
+    % vx = Mx([0;vel;0],par);
+    % fluxdiffx1(end) = vx(end)*1;
+
     % compute flux difference per grid cell via first order FD, assuming
     % flux gradient at the right boundary is 0
     % fluxdiffx1 = [(1/par.dx)*(flux(2:end)-flux(1:(end-1))); 0];
