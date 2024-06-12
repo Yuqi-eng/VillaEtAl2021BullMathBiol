@@ -26,7 +26,7 @@ dt = tspan(2)-tspan(1);
 
 %% Initial conditions - eq.(28)
 steadystate = [ones(2*par.K,1); zeros(par.K,1)];
-f = 1+0*exp(-((par.x)./0.2).^2);
+f = 1+5*exp(-((par.x)./0.2).^2);
 % f1 = 2 + 10*sin(0.1*pi.*par.x);
 % f2 = 1 + 0.5*par.x;
 % f3 = 2 + 10*cos(0.05*pi.*par.x);
@@ -41,26 +41,51 @@ y0 = [n0;p0;u0];
 
 %% Solve with ODE15i
 %%% Compute consistent yp0 
-res = @(y,yp)(norm(mechanochemical(y,yp,par)));
-disp(['residuum of steady state = ' ...
-    num2str(res(steadystate,0*steadystate), '%15.10e')]);
-opt = odeset('RelTol', 10.0^(-7), 'AbsTol', 10.0^(-7));
-nfixed = zeros(par.K,1);
-pfixed = zeros(par.K,1);
-ufixed = zeros(par.K,1);
-[y0,yp0,resnorm] = decic(@(t,y,yp)(mechanochemical(y,yp,par)), t0, ...
-    y0, [nfixed; pfixed; ufixed], ...
-    [zeros(3*par.K,1)], zeros(3*par.K,1), opt);
-disp(['residuum (from decic) of IC = ' num2str(resnorm, '%15.10e')]);
-disp(['residuum (from res()) of IC = ' num2str(res(y0,yp0), '%15.10e')]);
+% res = @(y,yp)(norm(mechanochemical(y,yp,par)));
+% disp(['residuum of steady state = ' ...
+%     num2str(res(steadystate,0*steadystate), '%15.10e')]);
+% opt = odeset('RelTol', 10.0^(-7), 'AbsTol', 10.0^(-7));
+% nfixed = zeros(par.K,1);
+% pfixed = zeros(par.K,1);
+% ufixed = zeros(par.K,1);
+% [y0,yp0,resnorm] = decic(@(t,y,yp)(mechanochemical(y,yp,par)), t0, ...
+%     y0, [nfixed; pfixed; ufixed], ...
+%     [zeros(3*par.K,1)], zeros(3*par.K,1), opt);
+% disp(['residuum (from decic) of IC = ' num2str(resnorm, '%15.10e')]);
+% disp(['residuum (from res()) of IC = ' num2str(res(y0,yp0), '%15.10e')]);
 
 %% Solve
 tic
 % [t,y] = ode15i(@(t,y,yp)(mechanochemical(y,yp,par)),tspan,y0,yp0);
-sol = ode15i(@(t,y,yp)(mechanochemical(y,yp,par)),tspan,y0,yp0);
-tfinal = sol.stats.tfinal;
-t = linspace(t0,tfinal,tfinal/dt+1);
-[y,yp] = deval(sol,t);
+a = [1 2 3 4 5];
+tau1 = [0.1 0.2 0.3 0.4 0.5];
+nleft = [];
+for i = 1:5
+    for j = 1:5
+    par.a = a(i);
+    par.tau1 = tau1(j);
+    %% Solve with ODE15i
+    %%% Compute consistent yp0 
+    res = @(y,yp)(norm(mechanochemical(y,yp,par)));
+    disp(['residuum of steady state = ' ...
+        num2str(res(steadystate,0*steadystate), '%15.10e')]);
+    opt = odeset('RelTol', 10.0^(-7), 'AbsTol', 10.0^(-7));
+    nfixed = zeros(par.K,1);
+    pfixed = zeros(par.K,1);
+    ufixed = zeros(par.K,1);
+    [y0,yp0,resnorm] = decic(@(t,y,yp)(mechanochemical(y,yp,par)), t0, ...
+        y0, [nfixed; pfixed; ufixed], ...
+        [zeros(3*par.K,1)], zeros(3*par.K,1), opt);
+    disp(['residuum (from decic) of IC = ' num2str(resnorm, '%15.10e')]);
+    disp(['residuum (from res()) of IC = ' num2str(res(y0,yp0), '%15.10e')]);
+    sol = ode15i(@(t,y,yp)(mechanochemical(y,yp,par)),tspan,y0,yp0);
+    tfinal = sol.stats.tfinal;
+    t = linspace(t0,tfinal,tfinal/dt+1);
+    [y,yp] = deval(sol,t);
+    nleft(end+1) = y(1,end);
+    end
+end
+disp(nleft);
 toc
 %%% Save computed solution to file
 filename = ['saved_y1D_' num2str(par.K)];
@@ -71,18 +96,18 @@ save(filename, 't', 'y', 'par', 'x', 'yp');
 % video_filename = [filename '.avi'];
 % plot_solution(x,y,yp,t,par,video_on,video_filename);
 pic_name = ['res' '.png'];
-plot_res(x,y,yp,par,tf,pic_name);
+% plot_res(x,y,yp,par,tf,pic_name);
 
 end
 
 %% Main function implementing the model
 function f = mechanochemical(y,yp,par)
     %%% Parameter values
-    a = 4;
+    a = par.a;
     D2 = 0.1;
     d2 = 1;
     E1 = 1.4e8;
-    tau1 = 0.4;
+    tau1 = par.tau1;
     
     %%% Reshape input vectors
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
@@ -106,7 +131,7 @@ function f = mechanochemical(y,yp,par)
 
     %%% Equation for n
     sig = Mx(uptilde, par) + E1*Mx(utilde,par) + Tr;
-    disp(sig(1));
+    % disp(sig(1));
     sig0 = 0.3*ones(size(sig));
     k1 = 4;
     fsig = (sig.^k1)./(sig0.^k1 + sig.^k1);
@@ -242,24 +267,28 @@ function plot_res(x,y,yp,par,tf,pic_name)
     v = [yp(2*par.K+1:3*par.K,end)];
     % res_file = 'res';
     % save(res_file,"n","p","u");
-    subplot(1,4,1)
+    subplot(1,3,1)
     plot(x,n)
-    title('$n(t,x)$')
-    % ylim([0.8,max(1.2,max(n))])
+    % title('$n(t,x)$')
+    title('Cell Density')
+    ylim([0,3])
     axis square
-    subplot(1,4,2)
+    subplot(1,3,2)
     plot(x,p)
-    title('$\rho(t,x)$')
-    % ylim([0.8,max(1.2,max(p))])
+    % title('$\rho(t,x)$')
+    title('Collagen Density')
+    ylim([0,3])
     axis square
-    subplot(1,4,3)
+    subplot(1,3,3)
     plot(x,u)
-    title('$u(t,x)$')
+    % title('$u(t,x)$')
+    title('Displacement field')
+    ylim([-1,1])
     axis square
-    subplot(1,4,4)
-    plot(x,v)
-    title('$v(t,x)$')
-    axis square
+    % subplot(1,4,4)
+    % plot(x,v)
+    % title('$v(t,x)$')
+    % axis square
     a = axes;
     a.Visible = 'off';
     t1 = title([' (t=',num2str(tf),')']);
