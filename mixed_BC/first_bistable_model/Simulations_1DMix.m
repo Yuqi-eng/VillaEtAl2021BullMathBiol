@@ -1,4 +1,4 @@
-function Simulations_1DMix(in_K)
+function Simulations_1DMix(in_stress, in_traction, in_K)
 clc
 close all
 
@@ -10,33 +10,34 @@ set(0,'defaultlinelinewidth',2)
 set(0,'defaultTextInterpreter','latex')
 
 %% Numerical set up
+par.stress = in_stress;          % 0 for no stress related cell recruitment, 1 for linear, 2 for Hill function
+par.traction = in_traction;      % 1 for traction force linear wrt. cells, 2 for Hill function
 par.K = in_K;                    % Number of spatial grid cells
 par.L = 1;                       % Domain length
-par.Nright = 1;
-par.Pright = 1;
-par.Uleft = 0;
-par.Uright = 0;
-x = linspace(0,par.L,par.K);
+par.Nright = 1;                  % Right dirichlet BC for cells
+par.Pright = 20;                 % Right dirichlet BC for collagen
+par.Uleft = 0;                   % Left dirichlet BC for displacement
+par.Uright = 0;                  % Right dirichlet BC for displacement
 par.x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = par.x(2)-par.x(1);      % Cell size
 t0 = 0;                          % Initial time
 tf = 100;                        % Final time
-tspan = linspace(t0,tf,1000);     % Time span
-dt = tspan(2)-tspan(1);
+tspan = linspace(t0,tf,100);     % Time span
+
+x = linspace(0,par.L,par.K);     % Discretise spatial domain, used for video generation
+dt = tspan(2)-tspan(1);          % Time step, used for video generation
 
 %% Initial conditions - eq.(28)
 steadystate = [ones(2*par.K,1); zeros(par.K,1)];
-f = 1+2*exp(-((par.x)./0.2).^2);
+f = 1+10*exp(-((par.x)./0.2).^2);
 % f1 = 2 + 10*sin(0.1*pi.*par.x);
 % f2 = 1 + 0.5*par.x;
 % f3 = 2 + 10*cos(0.05*pi.*par.x);
-n0 = (f.*ones(1,par.K)).';      % cells
+n0 = par.Nright.*(f.*ones(1,par.K)).';      % cells
 % n0 = ones(par.K,1);
-p0 = (f.*ones(1,par.K)).';      % collagen
-% p0 = ones(par.K,1);
+% p0 = (f.*ones(1,par.K)).';      % collagen
+p0 = par.Pright.*ones(par.K,1);
 u0 = zeros(par.K,1);            % displacement
-% u0 = sin(pi.*x+pi/2);
-% u0 = (f2.*ones(1,par.K)).';
 y0 = [n0;p0;u0];
 
 %% Solve with ODE15i
@@ -61,8 +62,8 @@ sol = ode15i(@(t,y,yp)(mechanochemical(y,yp,par)),tspan,y0,yp0);
 tfinal = sol.stats.tfinal;
 t = linspace(t0,tfinal,tfinal/dt+1);
 [y,yp] = deval(sol,t);
-
 toc
+
 %%% Save computed solution to file
 filename = ['saved_y1D_' num2str(par.K)];
 save(filename, 't', 'y', 'par', 'x', 'yp');
@@ -76,17 +77,27 @@ plot_res(x,y,yp,par,tf,pic_name);
 
 % pic_name2 = ['progression' '.png'];
 % plot_time(x,y,par,pic_name2);
-
 end
 
 %% Main function implementing the model
 function f = mechanochemical(y,yp,par)
-    %%% Parameter values
-    a = 4;
+    %%% Parameter values - shared with all versions
     D2 = 0.1;
-    d2 = 1;
-    E1 = 1.4e8;
-    tau1 = 0.4;
+    d2 = 0.05;
+    E1 = 1.5e15;
+    eta1 = 1e6;
+
+    %%% Parameter values - in_stress=1
+    a = 5;
+    k1 = 5;
+
+    %%% Parameter value - in_traction=1
+    taup1 = 1;
+
+    %%% Parameter values - in_traction=2
+    taup2 = 0.8;
+    N0 = 1.25;
+    k2 = 5;
     
     %%% Reshape input vectors
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
@@ -98,30 +109,35 @@ function f = mechanochemical(y,yp,par)
     uptilde = [0; up; 0];
 
     %%% Traction force term
-    % Tr = tau*p.*n;
-    % Trtilde = [Tr(2); Tr; tau*ptilde(end)*ntilde(end)];
-    % for when traction force term has a hill function
-    p0 = 1.25;
-    k2 = 4;
-    h1 = (p.^k2)./(p0^k2*ones(size(p)) + p.^k2);
-    Tr = tau1.*n.*h1;
-    p2 = (ptilde(end)^k2)/(p0^k2 + ptilde(end)^k2);
-    Trtilde = [Tr(2); Tr; tau1*ntilde(end)*p2];
+    if par.traction == 1    % Linear traction force
+        Tr = taup1.*p.*n;
+        Trtilde = [Tr(2); Tr; taup1*ptilde(end)*ntilde(end)];
+    else                    % Hill function traction force
+        hn = (n.^k2)./(N0^k2*ones(size(n)) + n.^k2);
+        Tr = taup2.*p.*hn;
+        n2 = (ntilde(end)^k2)/(N0^k2 + ntilde(end)^k2);
+        Trtilde = [Tr(2); Tr; taup2*ptilde(end)*n2];
+    end
 
-    %%% Equation for n
-    sig = Mx(uptilde, par) + E1*Mx(utilde,par) + Tr;
+    %%% Stress related cell recruitment
+    sig = eta1*Mx(uptilde, par) + E1*Mx(utilde,par) + Tr;
     % disp(sig(1));
-    sig0 = 0.3*ones(size(sig));
-    k1 = 4;
-    fsig = (sig.^k1)./(sig0.^k1 + sig.^k1);
-    % disp(fsig.');
-    fn = np - Mxx(ntilde, par) + MA(n,up,par) - a*fsig - ones(size(n)) + n;
+    if par.stress == 0
+        fsig = 0;
+    elseif par.stress == 1
+        fsig = sig;
+    else
+        fsig = a*(sig.^k1)./(ones(size(sig)) + sig.^k1);
+    end
+    
+    %%% Equation for n
+    fn = np - Mxx(ntilde, par) + MA(n,up,par) - fsig - ones(size(n)) + n;
 
     %%% Equation for p
     fp = pp - D2*Mxx(ptilde,par) + MA(p,up,par) - n + d2*p;
 
     %%% Equation for u 
-    fu = Mxx(uptilde, par) + E1*Mxx(utilde,par) + tau1*Mx(Trtilde, par);
+    fu = eta1*Mxx(uptilde, par) + E1*Mxx(utilde,par) + Mx(Trtilde, par);
 
     %%% Full system - eq.(S.1)
     f = [fn; fp; fu];
@@ -163,7 +179,6 @@ function fluxdiffx1 = MA(y, vel, par)
         end
     end
 
-    % flux(1) = 0;
     flux(1) = vel(1)*y(1);
 
     % compute flux difference per grid cell - def.(S.7) and (S.4)
@@ -191,7 +206,6 @@ function plot_solution(x,y,yp,t,par,video_on,video_filename)
         open(vid);
         figure('Units','normalized','Position',[0 0 0.5 0.45])
     end
-    maxu = 10^(-6);
 
     for i=1:length(t)
         clf
@@ -199,26 +213,26 @@ function plot_solution(x,y,yp,t,par,video_on,video_filename)
         p = [y(par.K+1:2*par.K,i)];
         u = [y(2*par.K+1:3*par.K,i)];
         v = [yp(2*par.K+1:3*par.K,i)];
-        if max(abs(u))>maxu
-          maxu = max(abs(u))+0.1*max(abs(u));
-        end
+
         subplot(1,4,1)
         plot(x,n)
         title('$n(t,x)$')
-        % ylim([0.8,max(1.2,max(n))])
+        ylim([0.5,max(1.5,max(n))])
         axis square
         subplot(1,4,2)
         plot(x,p)
         title('$\rho(t,x)$')
-        % ylim([0.8,max(1.2,max(p))])
+        ylim([10,max(30,max(p))])
         axis square
         subplot(1,4,3)
         plot(x,u)
         title('$u(t,x)$')
+        ylim([-0.1,max(0.1,max(u))])
         axis square
         subplot(1,4,4)
         plot(x,v)
         title('$v(t,x)$')
+        ylim([-0.1,max(0.1,max(v))])
         axis square
         a = axes;
         t1 = title([' (t=',num2str(t(i)),')']);
@@ -244,24 +258,24 @@ function plot_res(x,y,yp,par,tf,pic_name)
     p = [y(par.K+1:2*par.K,end)];
     u = [y(2*par.K+1:3*par.K,end)];
     v = [yp(2*par.K+1:3*par.K,end)];
-    subplot(1,2,1)
-    plot(x,n, "red")
-    % title('$n(t,x)$')
-    title('Cell Density')
-    ylim([0,3])
+    subplot(1,3,1)
+    plot(x,n)
+    title('$n(t,x)$')
+    % title('Cell Density')
+    ylim([0,2])
     axis square
-    subplot(1,2,2)
-    plot(x,p, "red")
-    % title('$\rho(t,x)$')
-    title('Collagen Density')
-    ylim([0,3])
+    subplot(1,3,2)
+    plot(x,p)
+    title('$\rho(t,x)$')
+    % title('Collagen Density')
+    ylim([10,30])
     axis square
-    % subplot(1,3,3)
-    % plot(x,u)
-    % title('$u(t,x)$')
+    subplot(1,3,3)
+    plot(x,u)
+    title('$u(t,x)$')
     % title('Displacement field')
-    % ylim([-1,1])
-    % axis square
+    ylim([-0.1,0.1])
+    axis square
     % subplot(1,4,4)
     % plot(x,v)
     % title('$v(t,x)$')
