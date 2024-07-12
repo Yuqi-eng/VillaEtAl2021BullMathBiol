@@ -1,4 +1,4 @@
-function Simulations_1DMix(in_stress, in_traction, in_IC, in_K)
+function nleft = Simulations_1DMix(in_stress, in_traction, in_IC, in_K, in_a, in_taup2)
 clc
 close all
 
@@ -22,11 +22,15 @@ par.Uright = 0;                  % Right dirichlet BC for displacement
 par.x = linspace(0,par.L,par.K); % Discretise spatial domain
 par.dx = par.x(2)-par.x(1);      % Cell size
 t0 = 0;                          % Initial time
-tf = 100;                        % Final time
+tf = 1000;                       % Final time
 tspan = linspace(t0,tf,100);     % Time span
 
 x = linspace(0,par.L,par.K);     % Discretise spatial domain, used for video generation
 dt = tspan(2)-tspan(1);          % Time step, used for video generation
+
+%%% For generating the parameter plane
+par.a = in_a;
+par.taup2 = in_taup2;
 
 %% Initial conditions - eq.(28)
 steadystate = [par.Nright*ones(par.K,1); par.Pright*ones(par.K,1); zeros(par.K,1)];
@@ -45,18 +49,18 @@ y0 = [n0;p0;u0];
 
 %% Solve with ODE15i
 %%% Compute consistent yp0 
-res = @(y,yp)(norm(mechanochemical(y,yp,par)));
-disp(['residuum of steady state = ' ...
-    num2str(res(steadystate,0*steadystate), '%15.10e')]);
+% res = @(y,yp)(norm(mechanochemical(y,yp,par)));
+% disp(['residuum of steady state = ' ...
+%     num2str(res(steadystate,0*steadystate), '%15.10e')]);
 opt = odeset('RelTol', 10.0^(-7), 'AbsTol', 10.0^(-7));
 nfixed = zeros(par.K,1);
 pfixed = zeros(par.K,1);
 ufixed = zeros(par.K,1);
-[y0,yp0,resnorm] = decic(@(t,y,yp)(mechanochemical(y,yp,par)), t0, ...
+[y0,yp0,~] = decic(@(t,y,yp)(mechanochemical(y,yp,par)), t0, ...
     y0, [nfixed; pfixed; ufixed], ...
     [zeros(3*par.K,1)], zeros(3*par.K,1), opt);
-disp(['residuum (from decic) of IC = ' num2str(resnorm, '%15.10e')]);
-disp(['residuum (from res()) of IC = ' num2str(res(y0,yp0), '%15.10e')]);
+% disp(['residuum (from decic) of IC = ' num2str(resnorm, '%15.10e')]);
+% disp(['residuum (from res()) of IC = ' num2str(res(y0,yp0), '%15.10e')]);
 
 %% Solve
 tic
@@ -65,6 +69,10 @@ sol = ode15i(@(t,y,yp)(mechanochemical(y,yp,par)),tspan,y0,yp0);
 tfinal = sol.stats.tfinal;
 t = linspace(t0,tfinal,tfinal/dt+1);
 [y,yp] = deval(sol,t);
+n = [y(1:par.K,end)];
+nleft = n(1);
+disp(['a = ' num2str(par.a) ', taup2 = ' num2str(par.taup2)]);
+disp(['Cell concentration at implant site = ' num2str(nleft)]);
 toc
 
 %%% Save computed solution to file
@@ -75,8 +83,9 @@ save(filename, 't', 'y', 'par', 'x', 'yp');
 % video_on = true; % Record video: YES (true), NO (false)
 % video_filename = [filename '.avi'];
 % plot_solution(x,y,yp,t,par,video_on,video_filename);
-pic_name = ['res' '.png'];
-plot_res(x,y,yp,par,tf,pic_name);
+% pic_name = ['res' '.png'];
+% plot_res(x,y,yp,par,tf,pic_name);
+
 
 % pic_name2 = ['progression' '.png'];
 % plot_time(x,y,par,pic_name2);
@@ -97,14 +106,14 @@ function f = mechanochemical(y,yp,par)
     elseif par.stress == 1
         E1 = 1.5e14;
         eta1 = 1e5;
-        taup1 = 0.1;
+        taup1 = 0.12;
         taup2 = 0.1;
     elseif par.stress == 2
         E1 = 1.5e15;
         eta1 = 1e6;
-        taup1 = 1;
-        taup2 = 1;
-    end    
+        taup1 = 0.2;
+        taup2 = par.taup2;
+    end
     
     %%% Reshape input vectors
     [n,p,u] = deal(y(1:par.K),y(par.K+1:2*par.K),y(2*par.K+1:3*par.K));
@@ -120,8 +129,8 @@ function f = mechanochemical(y,yp,par)
         Tr = taup1.*p.*n;
         Trtilde = [Tr(2); Tr; taup1*ptilde(end)*ntilde(end)];
     elseif par.traction == 2    % Hill function traction force
-        N0 = 1.25;
-        k2 = 4;
+        N0 = 2;
+        k2 = 5;
         hn = (n.^k2)./(N0^k2*ones(size(n)) + n.^k2);
         Tr = taup2.*p.*hn;
         n2 = (ntilde(end)^k2)/(N0^k2 + ntilde(end)^k2);
@@ -136,8 +145,8 @@ function f = mechanochemical(y,yp,par)
     elseif par.stress == 1
         fsig = sig;
     elseif par.stress == 2
-        a = 5;
-        k1 = 4;
+        a = par.a;
+        k1 = 5;
         fsig = a*(sig.^k1)./(ones(size(sig)) + sig.^k1);
     end
     
@@ -264,7 +273,7 @@ end
 
 %%% Plot solution 
 function plot_res(x,y,yp,par,tf,pic_name)
-    figure('Units','normalized','Position',[0 0 0.4 0.5])
+    figure('Units','normalized','Position',[0 0 0.4 0.3])
     n = [y(1:par.K,end)];
     p = [y(par.K+1:2*par.K,end)];
     u = [y(2*par.K+1:3*par.K,end)];
@@ -273,13 +282,15 @@ function plot_res(x,y,yp,par,tf,pic_name)
     plot(x,n)
     title('$n(t,x)$')
     % title('Cell Density')
-    ylim([0.5*min(n),1.2*max(n)])
+    ylim([1,3])
+    % ylim([0.5*min(n),1.2*max(n)])
     axis square
     subplot(1,3,2)
     plot(x,p)
     title('$\rho(t,x)$')
     % title('Collagen Density')
-    ylim([0.9*min(p),1.1*max(p)])
+    ylim([20,21])
+    % ylim([0.9*min(p),1.1*max(p)])
     axis square
     subplot(1,3,3)
     plot(x,u)
